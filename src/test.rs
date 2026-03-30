@@ -6,12 +6,12 @@ mod tests {
     use soroban_sdk::{
         symbol_short,
         testutils::{Address as _, Ledger, LedgerInfo},
-        Address, Env, Symbol, Vec,
+        Address, Env, String, Symbol, Vec,
     };
 
     use crate::{
-        GroupStatus, GroupVisibility, OrganizerRole, PaluwaganContract, PaluwaganContractClient,
-        PaymentState,
+        CreateGroupParams, GroupStatus, GroupVisibility, OrganizerRole, PaluwaganContract,
+        PaluwaganContractClient, PaymentState, PayoutState,
     };
 
     struct TestCtx {
@@ -76,15 +76,18 @@ mod tests {
     ) -> u32 {
         ctx.client.create_group(
             &ctx.creator,
-            &Symbol::new(&ctx.env, organizer_role),
-            &Symbol::new(&ctx.env, payout_order_mode),
-            &1000_i128,
-            &max_members,
-            &symbol_short!("weekly"),
-            &symbol_short!("cash"),
-            &is_public,
-            &0_u32,
-            &0_u32,
+            &CreateGroupParams {
+                name: String::from_str(&ctx.env, "Test Group"),
+                organizer_role: Symbol::new(&ctx.env, organizer_role),
+                payout_order_mode: Symbol::new(&ctx.env, payout_order_mode),
+                contribution_amount: 1000_i128,
+                max_members,
+                schedule: symbol_short!("weekly"),
+                payout_type: symbol_short!("cash"),
+                is_public,
+                interest_bps: 0_u32,
+                custom_cycle_ledger_gap: 0_u32,
+            },
         )
     }
 
@@ -98,15 +101,18 @@ mod tests {
     ) -> u32 {
         ctx.client.create_group(
             &ctx.creator,
-            &Symbol::new(&ctx.env, organizer_role),
-            &Symbol::new(&ctx.env, payout_order_mode),
-            &1000_i128,
-            &max_members,
-            &Symbol::new(&ctx.env, "custom"),
-            &symbol_short!("cash"),
-            &is_public,
-            &0_u32,
-            &custom_gap,
+            &CreateGroupParams {
+                name: String::from_str(&ctx.env, "Test Group"),
+                organizer_role: Symbol::new(&ctx.env, organizer_role),
+                payout_order_mode: Symbol::new(&ctx.env, payout_order_mode),
+                contribution_amount: 1000_i128,
+                max_members,
+                schedule: Symbol::new(&ctx.env, "custom"),
+                payout_type: symbol_short!("cash"),
+                is_public,
+                interest_bps: 0_u32,
+                custom_cycle_ledger_gap: custom_gap,
+            },
         )
     }
 
@@ -131,6 +137,16 @@ mod tests {
         }
     }
 
+    /// Organizer releases payout for `current_cycle`, then the round recipient confirms receipt (required before `advance_cycle`).
+    fn release_and_confirm_payout(ctx: &TestCtx, group_id: u32) -> Address {
+        let g = ctx.client.get_group(&group_id);
+        let cycle = g.current_cycle;
+        let recipient = ctx.client.release_cycle_payout(&group_id, &ctx.creator);
+        ctx.client
+            .confirm_payout_received(&group_id, &cycle, &recipient);
+        recipient
+    }
+
     fn soroban_vec_contains(v: &Vec<Address>, a: &Address) -> bool {
         let mut i = 0;
         while i < v.len() {
@@ -151,6 +167,7 @@ mod tests {
         let g = ctx.client.get_group(&gid);
         let members = ctx.client.get_group_members(&gid);
 
+        assert_eq!(g.name, String::from_str(&ctx.env, "Test Group"));
         assert_eq!(g.organizer_role, OrganizerRole::OrganizerOnly);
         assert_eq!(g.current_members, 0);
         assert_eq!(members.len(), 0);
@@ -326,6 +343,30 @@ mod tests {
     }
 
     #[test]
+    fn test_organizer_member_does_not_need_receiver_confirm_for_own_payment() {
+        let mut ctx = setup_ctx();
+        fix_ctx_addresses(&mut ctx);
+
+        let gid = create_group(&ctx, "org_member", "join_order", true, 2);
+        fill_public_group(&ctx, gid, &[ctx.alice.clone()]);
+        lock_and_generate(&ctx, gid);
+
+        ctx.client.confirm_payment_sender(&gid, &1, &ctx.creator);
+        assert_eq!(
+            ctx.client.get_payment_status(&gid, &1, &ctx.creator),
+            PaymentState::Confirmed
+        );
+        assert!(ctx.client.verify_payment(&gid, &1, &ctx.creator));
+
+        ctx.client.confirm_payment_sender(&gid, &1, &ctx.alice);
+        ctx.client
+            .confirm_payment_receiver(&gid, &1, &ctx.creator, &ctx.alice);
+
+        let rid = ctx.client.release_cycle_payout(&gid, &ctx.creator);
+        ctx.client.confirm_payout_received(&gid, &1, &rid);
+    }
+
+    #[test]
     fn test_receiver_confirmation_works() {
         let mut ctx = setup_ctx();
         fix_ctx_addresses(&mut ctx);
@@ -435,6 +476,15 @@ mod tests {
         let recipient = ctx.client.release_cycle_payout(&gid, &ctx.creator);
 
         assert_eq!(recipient, ctx.alice);
+        assert_eq!(
+            ctx.client.get_payout_state(&gid, &1),
+            PayoutState::ReleasedByOrganizer
+        );
+        ctx.client.confirm_payout_received(&gid, &1, &recipient);
+        assert_eq!(
+            ctx.client.get_payout_state(&gid, &1),
+            PayoutState::ReceivedConfirmedByRecipient
+        );
     }
 
     #[test]
@@ -456,7 +506,7 @@ mod tests {
 
     #[test]
     #[should_panic]
-    fn test_cycle_cannot_advance_unless_payout_was_released() {
+    fn test_cycle_cannot_advance_without_organizer_release() {
         let mut ctx = setup_ctx();
         fix_ctx_addresses(&mut ctx);
 
@@ -464,6 +514,21 @@ mod tests {
         fill_public_group(&ctx, gid, &[ctx.alice.clone(), ctx.bob.clone()]);
         lock_and_generate(&ctx, gid);
 
+        ctx.client.advance_cycle(&gid, &ctx.creator);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_cycle_cannot_advance_after_release_until_recipient_confirms() {
+        let mut ctx = setup_ctx();
+        fix_ctx_addresses(&mut ctx);
+
+        let gid = create_group(&ctx, "org_only", "join_order", true, 2);
+        fill_public_group(&ctx, gid, &[ctx.alice.clone(), ctx.bob.clone()]);
+        lock_and_generate(&ctx, gid);
+
+        confirm_full_cycle(&ctx, gid, 1, &[ctx.alice.clone(), ctx.bob.clone()]);
+        let _ = ctx.client.release_cycle_payout(&gid, &ctx.creator);
         ctx.client.advance_cycle(&gid, &ctx.creator);
     }
 
@@ -477,7 +542,7 @@ mod tests {
         lock_and_generate(&ctx, gid);
 
         confirm_full_cycle(&ctx, gid, 1, &[ctx.alice.clone(), ctx.bob.clone()]);
-        let _ = ctx.client.release_cycle_payout(&gid, &ctx.creator);
+        let _ = release_and_confirm_payout(&ctx, gid);
         ctx.client.advance_cycle(&gid, &ctx.creator);
 
         let g_mid = ctx.client.get_group(&gid);
@@ -485,7 +550,7 @@ mod tests {
         assert_eq!(g_mid.current_cycle, 2);
 
         confirm_full_cycle(&ctx, gid, 2, &[ctx.alice.clone(), ctx.bob.clone()]);
-        let _ = ctx.client.release_cycle_payout(&gid, &ctx.creator);
+        let _ = release_and_confirm_payout(&ctx, gid);
         ctx.client.advance_cycle(&gid, &ctx.creator);
 
         let g_end = ctx.client.get_group(&gid);
@@ -503,7 +568,7 @@ mod tests {
         lock_and_generate(&ctx, gid);
 
         confirm_full_cycle(&ctx, gid, 1, &[ctx.alice.clone(), ctx.bob.clone()]);
-        let first_recipient = ctx.client.release_cycle_payout(&gid, &ctx.creator);
+        let first_recipient = release_and_confirm_payout(&ctx, gid);
         assert_eq!(first_recipient, ctx.alice);
         ctx.client.advance_cycle(&gid, &ctx.creator);
 
@@ -532,13 +597,13 @@ mod tests {
         lock_and_generate(&ctx, gid);
 
         confirm_full_cycle(&ctx, gid, 1, &[ctx.alice.clone(), ctx.bob.clone()]);
-        let _ = ctx.client.release_cycle_payout(&gid, &ctx.creator);
+        let _ = release_and_confirm_payout(&ctx, gid);
         ctx.client.advance_cycle(&gid, &ctx.creator);
 
         assert_eq!(ctx.client.get_user_trust(&ctx.alice).completed_groups, 0);
 
         confirm_full_cycle(&ctx, gid, 2, &[ctx.alice.clone(), ctx.bob.clone()]);
-        let _ = ctx.client.release_cycle_payout(&gid, &ctx.creator);
+        let _ = release_and_confirm_payout(&ctx, gid);
         ctx.client.advance_cycle(&gid, &ctx.creator);
 
         assert_eq!(ctx.client.get_user_trust(&ctx.alice).completed_groups, 1);
@@ -564,11 +629,11 @@ mod tests {
         lock_and_generate(&ctx, gid);
 
         confirm_full_cycle(&ctx, gid, 1, &[ctx.alice.clone(), ctx.bob.clone()]);
-        let _ = ctx.client.release_cycle_payout(&gid, &ctx.creator);
+        let _ = release_and_confirm_payout(&ctx, gid);
         ctx.client.advance_cycle(&gid, &ctx.creator);
 
         confirm_full_cycle(&ctx, gid, 2, &[ctx.alice.clone(), ctx.bob.clone()]);
-        let _ = ctx.client.release_cycle_payout(&gid, &ctx.creator);
+        let _ = release_and_confirm_payout(&ctx, gid);
         ctx.client.advance_cycle(&gid, &ctx.creator);
 
         assert_eq!(ctx.client.get_user_trust(&ctx.alice).reliability_score, Some(5));

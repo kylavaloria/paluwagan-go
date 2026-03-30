@@ -18,34 +18,91 @@
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
                 },
                 {
-                  "symbol": "org_only"
-                },
-                {
-                  "symbol": "join_order"
-                },
-                {
-                  "i128": {
-                    "hi": 0,
-                    "lo": 1000
-                  }
-                },
-                {
-                  "u32": 2
-                },
-                {
-                  "symbol": "custom"
-                },
-                {
-                  "symbol": "cash"
-                },
-                {
-                  "bool": true
-                },
-                {
-                  "u32": 0
-                },
-                {
-                  "u32": 1
+                  "map": [
+                    {
+                      "key": {
+                        "symbol": "contribution_amount"
+                      },
+                      "val": {
+                        "i128": {
+                          "hi": 0,
+                          "lo": 1000
+                        }
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "custom_cycle_ledger_gap"
+                      },
+                      "val": {
+                        "u32": 1
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "interest_bps"
+                      },
+                      "val": {
+                        "u32": 0
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "is_public"
+                      },
+                      "val": {
+                        "bool": true
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "max_members"
+                      },
+                      "val": {
+                        "u32": 2
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "name"
+                      },
+                      "val": {
+                        "string": "Test Group"
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "organizer_role"
+                      },
+                      "val": {
+                        "symbol": "org_only"
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "payout_order_mode"
+                      },
+                      "val": {
+                        "symbol": "join_order"
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "payout_type"
+                      },
+                      "val": {
+                        "symbol": "cash"
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "schedule"
+                      },
+                      "val": {
+                        "symbol": "custom"
+                      }
+                    }
+                  ]
                 }
               ]
             }
@@ -340,6 +397,14 @@
                       },
                       "val": {
                         "u32": 2
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "name"
+                      },
+                      "val": {
+                        "string": "Test Group"
                       }
                     },
                     {

@@ -1,0 +1,5 @@
+# Windows note: if `rustc` crashes with STATUS_STACK_BUFFER_OVERRUN or you see impossible
+# errors in `memchr`/`quote`, try `cargo clean`, raise the paging file, exclude this repo
+# from real-time AV, and keep jobs low (below).
+[build]
+jobs = 2

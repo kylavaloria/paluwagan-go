@@ -1,8 +1,8 @@
 #![no_std]
 
 use soroban_sdk::{
-    contract, contracterror, contractimpl, contracttype, panic_with_error, Address, Env, Symbol,
-    Vec,
+    contract, contracterror, contractimpl, contracttype, panic_with_error, Address, Env, String,
+    Symbol, Vec,
 };
 
 #[contract]
@@ -30,6 +30,9 @@ pub enum ContractError {
     InvalidPayoutOrderMode = 16,
     InvalidCycleGap = 17,
     CycleNotOverdue = 18,
+    InvalidGroupName = 19,
+    PayoutNotReleased = 20,
+    PayoutRecipientNotConfirmed = 21,
 }
 
 #[contracttype]
@@ -69,10 +72,37 @@ pub enum PayoutOrderMode {
     Randomized,
 }
 
+/// Payout handoff state for the active round (UI / future dual-ack flows).
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum PayoutState {
+    NotReleased,
+    ReleasedByOrganizer,
+    ReceivedConfirmedByRecipient,
+}
+
+/// Arguments for [`PaluwaganContract::create_group`] (bundled so the host stays within
+/// Soroban's per-function parameter limit).
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CreateGroupParams {
+    pub name: String,
+    pub organizer_role: Symbol,
+    pub payout_order_mode: Symbol,
+    pub contribution_amount: i128,
+    pub max_members: u32,
+    pub schedule: Symbol,
+    pub payout_type: Symbol,
+    pub is_public: bool,
+    pub interest_bps: u32,
+    pub custom_cycle_ledger_gap: u32,
+}
+
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Group {
     pub creator: Address,
+    pub name: String,
     pub organizer_role: OrganizerRole,
     pub payout_order_mode: PayoutOrderMode,
     pub contribution_amount: i128,
@@ -122,6 +152,9 @@ pub enum DataKey {
     GroupMembers(u32),
     GroupInvites(u32),
     GroupPayoutOrder(u32),
+    /// Organizer marked funds as sent for this cycle (recipient must still ack).
+    PayoutReleased(u32, u32),
+    /// Recipient confirmed receiving payout for their turn (`true` permanently for that address in the group).
     ReceivedPayout(u32, Address),
     SenderConfirmed(u32, u32, Address),
     ReceiverConfirmed(u32, u32, Address),
@@ -243,11 +276,17 @@ fn current_recipient(env: &Env, group_id: u32, cycle: u32) -> Address {
 }
 
 fn is_payment_confirmed(env: &Env, group_id: u32, cycle: u32, sender: &Address) -> bool {
+    let group = get_group_or_panic(env, group_id);
     let sender_ok = env
         .storage()
         .persistent()
         .get::<_, bool>(&DataKey::SenderConfirmed(group_id, cycle, sender.clone()))
         .unwrap_or(false);
+
+    // Creator collects the pool; their own contribution does not need a second "receiver" ack.
+    if sender == &group.creator {
+        return sender_ok;
+    }
 
     let receiver_ok = env
         .storage()
@@ -421,20 +460,25 @@ impl PaluwaganContract {
     /// payout_order_mode:
     /// - "join_order"
     /// - "randomized"
-    pub fn create_group(
-        env: Env,
-        creator: Address,
-        organizer_role: Symbol,
-        payout_order_mode: Symbol,
-        contribution_amount: i128,
-        max_members: u32,
-        schedule: Symbol,
-        payout_type: Symbol,
-        is_public: bool,
-        interest_bps: u32,
-        custom_cycle_ledger_gap: u32,
-    ) -> u32 {
+    pub fn create_group(env: Env, creator: Address, params: CreateGroupParams) -> u32 {
         creator.require_auth();
+
+        let CreateGroupParams {
+            name,
+            organizer_role,
+            payout_order_mode,
+            contribution_amount,
+            max_members,
+            schedule,
+            payout_type,
+            is_public,
+            interest_bps,
+            custom_cycle_ledger_gap,
+        } = params;
+
+        if name.is_empty() || name.len() > 50 {
+            panic_with_error!(env, ContractError::InvalidGroupName);
+        }
 
         let role = parse_organizer_role(&env, &organizer_role);
         let payout_mode = parse_payout_order_mode(&env, &payout_order_mode);
@@ -466,6 +510,7 @@ impl PaluwaganContract {
 
         let group = Group {
             creator: creator.clone(),
+            name,
             organizer_role: role,
             payout_order_mode: payout_mode,
             contribution_amount,
@@ -609,10 +654,16 @@ impl PaluwaganContract {
         }
 
         env.storage().persistent().set(&key, &true);
+
+        // Same late-payment trust signal as `confirm_payment_receiver` (organizer has no separate receipt step).
+        if sender == group.creator && env.ledger().sequence() > group.cycle_due_ledger {
+            mark_late_once(&env, group_id, cycle, &sender);
+        }
     }
 
     /// Receiver confirms receipt from a sender for the current cycle.
     /// MVP rule: the creator is the collector/receiver.
+    /// The creator's own contribution is fully confirmed after `confirm_payment_sender` only.
     pub fn confirm_payment_receiver(
         env: Env,
         group_id: u32,
@@ -698,6 +749,7 @@ impl PaluwaganContract {
         cycle: u32,
         sender: Address,
     ) -> PaymentState {
+        let group = get_group_or_panic(&env, group_id);
         let sender_ok = env
             .storage()
             .persistent()
@@ -707,10 +759,12 @@ impl PaluwaganContract {
         let receiver_ok = env
             .storage()
             .persistent()
-            .get::<_, bool>(&DataKey::ReceiverConfirmed(group_id, cycle, sender))
+            .get::<_, bool>(&DataKey::ReceiverConfirmed(group_id, cycle, sender.clone()))
             .unwrap_or(false);
 
-        if sender_ok && receiver_ok {
+        let organizer_done = sender == group.creator && sender_ok;
+
+        if organizer_done || (sender_ok && receiver_ok) {
             PaymentState::Confirmed
         } else if sender_ok || receiver_ok {
             PaymentState::PendingConfirmation
@@ -719,8 +773,9 @@ impl PaluwaganContract {
         }
     }
 
-    /// Releases the current cycle payout once all member contributions are confirmed.
-    /// A user can only receive payout once.
+    /// Marks the current cycle payout as released by the organizer (off-chain handoff).
+    /// The round recipient must call `confirm_payout_received` before the cycle can advance.
+    /// Each address may only go through this flow once per group (enforced via `ReceivedPayout`).
     pub fn release_cycle_payout(env: Env, group_id: u32, creator: Address) -> Address {
         let group = get_group_or_panic(&env, group_id);
         require_creator(&env, &group, &creator);
@@ -738,23 +793,80 @@ impl PaluwaganContract {
             panic_with_error!(&env, ContractError::PaymentNotConfirmed);
         }
 
-        let recipient = current_recipient(&env, group_id, group.current_cycle);
-
-        let received_key = DataKey::ReceivedPayout(group_id, recipient.clone());
+        let current = group.current_cycle;
+        let released_key = DataKey::PayoutReleased(group_id, current);
         if env
             .storage()
             .persistent()
-            .get::<_, bool>(&received_key)
+            .get::<_, bool>(&released_key)
             .unwrap_or(false)
         {
             panic_with_error!(&env, ContractError::AlreadyReceivedPayout);
         }
 
-        env.storage().persistent().set(&received_key, &true);
+        let recipient = current_recipient(&env, group_id, current);
+
+        env.storage().persistent().set(&released_key, &true);
         recipient
     }
 
-    /// Advances to the next cycle only after payout is released.
+    /// Payout handoff: not released → released by organizer → recipient confirmed.
+    pub fn get_payout_state(env: Env, group_id: u32, cycle: u32) -> PayoutState {
+        let group = get_group_or_panic(&env, group_id);
+        if group.status != GroupStatus::Active || cycle == 0 || cycle != group.current_cycle {
+            return PayoutState::NotReleased;
+        }
+        let released = env
+            .storage()
+            .persistent()
+            .get::<_, bool>(&DataKey::PayoutReleased(group_id, cycle))
+            .unwrap_or(false);
+        if !released {
+            return PayoutState::NotReleased;
+        }
+        let recipient = current_recipient(&env, group_id, cycle);
+        let recipient_confirmed = env
+            .storage()
+            .persistent()
+            .get::<_, bool>(&DataKey::ReceivedPayout(group_id, recipient.clone()))
+            .unwrap_or(false);
+        if recipient_confirmed {
+            PayoutState::ReceivedConfirmedByRecipient
+        } else {
+            PayoutState::ReleasedByOrganizer
+        }
+    }
+
+    /// Round recipient confirms they received the payout. Requires `release_cycle_payout` for this round first. Idempotent.
+    pub fn confirm_payout_received(env: Env, group_id: u32, cycle: u32, recipient: Address) {
+        recipient.require_auth();
+        let group = get_group_or_panic(&env, group_id);
+        if group.status != GroupStatus::Active {
+            panic_with_error!(&env, ContractError::InvalidGroupStatus);
+        }
+        if cycle == 0 || cycle != group.current_cycle {
+            panic_with_error!(&env, ContractError::InvalidCycle);
+        }
+        let expected = current_recipient(&env, group_id, cycle);
+        if expected != recipient {
+            panic_with_error!(&env, ContractError::InvalidPayoutRecipient);
+        }
+        let released = env
+            .storage()
+            .persistent()
+            .get::<_, bool>(&DataKey::PayoutReleased(group_id, cycle))
+            .unwrap_or(false);
+        if !released {
+            panic_with_error!(&env, ContractError::PayoutNotReleased);
+        }
+        let ack_key = DataKey::ReceivedPayout(group_id, recipient.clone());
+        if env.storage().persistent().get::<_, bool>(&ack_key).unwrap_or(false) {
+            return;
+        }
+        env.storage().persistent().set(&ack_key, &true);
+    }
+
+    /// Advances to the next cycle only after the round recipient has confirmed payout receipt.
     /// If all cycles are complete, marks the group as completed and updates completed_groups for all members.
     pub fn advance_cycle(env: Env, group_id: u32, creator: Address) {
         let mut group = get_group_or_panic(&env, group_id);
@@ -766,14 +878,23 @@ impl PaluwaganContract {
 
         let recipient = current_recipient(&env, group_id, group.current_cycle);
 
-        let received = env
+        let released = env
             .storage()
             .persistent()
-            .get::<_, bool>(&DataKey::ReceivedPayout(group_id, recipient))
+            .get::<_, bool>(&DataKey::PayoutReleased(group_id, group.current_cycle))
+            .unwrap_or(false);
+        if !released {
+            panic_with_error!(&env, ContractError::PayoutNotReleased);
+        }
+
+        let recipient_confirmed = env
+            .storage()
+            .persistent()
+            .get::<_, bool>(&DataKey::ReceivedPayout(group_id, recipient.clone()))
             .unwrap_or(false);
 
-        if !received {
-            panic_with_error!(&env, ContractError::InvalidPayoutRecipient);
+        if !recipient_confirmed {
+            panic_with_error!(&env, ContractError::PayoutRecipientNotConfirmed);
         }
 
         if group.current_cycle >= group.total_cycles {

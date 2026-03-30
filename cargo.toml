@@ -6,13 +6,18 @@ description = "A Soroban-based paluwagan coordination system with immutable grou
 license = "MIT"
 
 [lib]
-crate-type = ["cdylib"]
+# `rlib` is required so `cargo test` can link this crate on the host; `cdylib` is for WASM deployment.
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 soroban-sdk = { version = "22.0.0", features = ["alloc"] }
 
 [dev-dependencies]
 soroban-sdk = { version = "22.0.0", features = ["testutils", "alloc"] }
+
+# Host `cargo test` links this `#![no_std]` crate; match release and avoid unwind + missing `panic_handler`.
+[profile.dev]
+panic = "abort"
 
 [profile.release]
 opt-level = "z"
