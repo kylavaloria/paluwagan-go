@@ -20,6 +20,7 @@
 
 <p>
   <a href="#overview">Overview</a> &nbsp;|&nbsp;
+  <a href="#features">Features</a> &nbsp;|&nbsp;
   <a href="#prerequisites--build">Build</a> &nbsp;|&nbsp;
   <a href="#example-walkthrough">Walkthrough</a> &nbsp;|&nbsp;
   <a href="#contract-methods">Methods</a> &nbsp;|&nbsp;
@@ -45,11 +46,207 @@
 > This contract is designed for the **Stellar testnet**. All walkthroughs below use `--network testnet`. Replace `<CONTRACT_ID>`, `<GROUP_ID>`, and address placeholders with your actual values.
 
 ## Smart Contract
-**Contract ID:** `CCO5IV7XJWN6ODK7TRIN2M5B6GSA6JQDUF2QW6IMJJS5UEXKSFMYWGHH`
+**Contract ID:** `CAF4AXOJ73T7SGRMY2TCH2SN7QDZD7QEA732G6BQUHDG3G4CJXRACFI7`
 
-**Stellar Expert:** https://stellar.expert/explorer/testnet/contract/CCO5IV7XJWN6ODK7TRIN2M5B6GSA6JQDUF2QW6IMJJS5UEXKSFMYWGHH
+**Stellar Expert:** https://stellar.expert/explorer/testnet/contract/CAF4AXOJ73T7SGRMY2TCH2SN7QDZD7QEA732G6BQUHDG3G4CJXRACFI7
 
-<img width="1879" height="849" alt="Screenshot 2026-03-31 204038" src="https://github.com/user-attachments/assets/d4caf103-d4fb-4585-9949-6928b5dc986a" />
+<img width="1876" height="867" alt="image" src="https://github.com/user-attachments/assets/27cca7a9-17e4-4efc-bf89-5d98d0fa0868" />
+
+## Features
+
+### Core Features
+
+1. **Wallet & Blockchain Integration**
+   - Connect wallet (Stellar/Soroban-based) from the landing page
+   - Wallet address displayed in UI
+   - Blockchain-powered tracking of:
+     - Contributions
+     - Payouts
+     - Group records
+
+2. **Landing Page / Onboarding**
+   - Clear value proposition (trust + transparency via blockchain)
+   - Main actions:
+     - Create a group
+     - Join a group
+   - Language selector (e.g., English)
+
+### Group Management Features
+
+3. **Create Group (Multi-step Flow)**
+
+   A structured 3-step wizard:
+
+   - **Step 1: Basics**
+     - Group name
+     - Organizer participation toggle:
+       - Organizer contributes OR only manages
+     - Number of members
+     - Visibility:
+       - Public (anyone can join)
+       - Private (invite-only)
+   - **Step 2: Contribution Settings**
+     - Contribution amount (in XLM)
+     - Contribution schedule:
+       - Weekly
+       - Monthly
+       - Quarterly
+       - Yearly
+       - Custom interval
+     - Optional interest rate slider
+   - **Step 3: Payout Configuration**
+     - Payout order:
+       - By join order (first come, first served)
+       - Random (fair shuffle)
+     - Payout type:
+       - Cash (XLM, on-chain)
+       - Item / in-kind (off-chain/manual)
+     - Final summary view before creation
+
+4. **Group Hub / Discovery**
+   - Search group by ID
+   - Open existing group
+   - Create new group
+   - View public groups list
+   - Group status indicators:
+     - Active
+     - Waiting for members
+   - Quick tips panel:
+     - Public vs invite-only explanation
+     - Sharing guidance
+     - Member requirements
+
+5. **Group Details Page**
+   - Displays:
+     - Contribution amount
+     - Schedule
+     - Payout type
+     - Payout order
+     - Visibility
+     - Organizer role
+   - Group status:
+     - Waiting for members
+     - Active
+     - Completed
+   - Shareable group link
+
+6. **Join Group**
+   - Join button for open groups
+   - Real-time member count
+   - Notification when group is open to join
+
+### Member & Reputation System
+
+7. **Member Management**
+   - Member list with:
+     - Wallet IDs
+     - Roles (Organizer / Member)
+     - Ratings (stars)
+   - Tracks participation per group
+
+8. **Reliability Score System**
+   - User profile includes:
+     - Reliability score (star-based)
+     - Based on on-chain activity
+   - Metrics tracked:
+     - Joined groups
+     - Completed cycles
+     - Late payments
+     - Missed payments
+     - Defaulted groups
+   - Explanation of how score is calculated
+
+### Payments & Payouts
+
+9. **Payment Tracking**
+   - Per-round payment status:
+     - Confirmed
+     - Pending confirmation
+   - Transparent tracking for each member
+
+10. **Payout System**
+    - Shows:
+      - Current payout recipient
+      - Payout order per round
+    - Organizer actions:
+      - Release payout
+      - Move to next round
+    - Supports:
+      - On-chain payouts (XLM)
+      - Off-chain/manual payouts
+
+11. **Round-Based Cycle Management**
+    - Tracks:
+      - Current round
+      - Next round progression
+    - Completion state:
+      - “All rounds completed” confirmation
+
+### Organizer Controls
+
+12. **Organizer Actions**
+    - Start group (once enough members join)
+    - Release payouts
+    - Advance rounds
+    - Manage group lifecycle
+
+### Transparency & Trust Features
+
+13. **Blockchain-backed Transparency**
+    - Immutable contribution records
+    - Verifiable payouts
+    - Public visibility (for public groups)
+    - Reliability scoring tied to on-chain history
+
+### Navigation & UI Features
+
+14. **Navigation System**
+    - Tabs:
+      - Group
+      - Create group
+      - Profile
+
+15. **Profile Management**
+    - Username (public & unique)
+    - Wallet address display + copy
+    - Personal stats dashboard
+
+## UI Screenshots
+### Landing Page (Main CTA + Wallet Connect)
+<img width="975" height="430" alt="image" src="https://github.com/user-attachments/assets/b1e2c843-c6f4-445f-9e2e-8697245f3efc" />
+
+### Create Group: Basics Setup
+<img width="975" height="754" alt="image" src="https://github.com/user-attachments/assets/17f427b6-0836-41f7-8b4d-a68ede53160f" />
+
+### Create Group: Contribution Settings
+<img width="975" height="776" alt="image" src="https://github.com/user-attachments/assets/e16726b3-5c6c-40c0-b424-d1f50d05eb0d" />
+
+### Create Group: Payout Setup & Summary
+<img width="975" height="907" alt="image" src="https://github.com/user-attachments/assets/82ce1dfa-b8b2-4425-b83d-7d5d3ea7fc89" />
+
+### Group Dashboard (Waiting for Members)
+<img width="975" height="745" alt="image" src="https://github.com/user-attachments/assets/b49a792e-e39f-4061-99cd-41a55b751500" />
+
+### Group Hub / Discovery Page
+<img width="975" height="494" alt="image" src="https://github.com/user-attachments/assets/4b1459d3-56a3-41b2-8f74-113dbddcb2d3" />
+
+### Group Open (Join Flow)
+<img width="975" height="913" alt="image" src="https://github.com/user-attachments/assets/45963a23-7f5f-497c-8b46-74c380c9b78b" />
+
+### Payment Status (Round 1)
+<img width="975" height="404" alt="image" src="https://github.com/user-attachments/assets/08b8994d-791d-49ba-a676-99cea27ddfe5" />
+
+### Payout Order & Active Round
+<img width="975" height="568" alt="image" src="https://github.com/user-attachments/assets/4e2ceeb4-621a-4b16-94cc-c612c0cf55f3" />
+
+### Organizer Actions (Payout Execution)
+<img width="975" height="521" alt="image" src="https://github.com/user-attachments/assets/bab0f474-a081-4bd5-8f88-e50603aa9012" />
+
+### Group Completion State
+<img width="975" height="521" alt="image" src="https://github.com/user-attachments/assets/21d78dd7-2378-4829-bb88-25ab627723da" />
+
+### User Profile & Reliability Score
+<img width="975" height="1148" alt="image" src="https://github.com/user-attachments/assets/df65e1fd-8065-4521-a93e-88fd320cbac9" />
 
 ## Prerequisites & Build
 
