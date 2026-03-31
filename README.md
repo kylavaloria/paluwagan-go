@@ -26,7 +26,30 @@
   <a href="#test-coverage">Tests</a>
 </p>
 
+<table>
+  <tr>
+    <td><strong>Contract ID</strong></td>
+    <td><code>CCO5IV7XJWN6ODK7TRIN2M5B6GSA6JQDUF2QW6IMJJS5UEXKSFMYWGHH</code></td>
+  </tr>
+  <tr>
+    <td><strong>Explorer</strong></td>
+    <td>
+      <a href="https://stellar.expert/explorer/testnet/contract/CCO5IV7XJWN6ODK7TRIN2M5B6GSA6JQDUF2QW6IMJJS5UEXKSFMYWGHH">
+        <img src="https://img.shields.io/badge/Stellar%20Expert-View%20Contract-7B2D8B?style=for-the-badge&logo=stellar&logoColor=white" />
+      </a>
+    </td>
+  </tr>
+</table>
+
 </div>
+
+<br/>
+
+<p align="center">
+  <a href="https://stellar.expert/explorer/testnet/contract/CCO5IV7XJWN6ODK7TRIN2M5B6GSA6JQDUF2QW6IMJJS5UEXKSFMYWGHH">
+    <img src="https://ibb.co/08YNW68" width="80%" alt="Stellar Expert — Paluwagan Go contract on testnet" />
+  </a>
+</p>
 
 <br/>
 
