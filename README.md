@@ -31,6 +31,9 @@
 
 <br/>
 
+## Link to Application
+https://paluwagan-go.vercel.app/
+
 ## Overview
 
 **Paluwagan** is a traditional Filipino rotating savings system where a group of members each contribute a fixed amount per cycle, and one member receives the full pooled amount each round. This contract brings that system on-chain using **Soroban** on the Stellar network.
