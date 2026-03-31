@@ -44,21 +44,12 @@
 > [!NOTE]
 > This contract is designed for the **Stellar testnet**. All walkthroughs below use `--network testnet`. Replace `<CONTRACT_ID>`, `<GROUP_ID>`, and address placeholders with your actual values.
 
-<br/>
-
-<div align="center">
-
+## Smart Contract
 **Contract ID:** `CCO5IV7XJWN6ODK7TRIN2M5B6GSA6JQDUF2QW6IMJJS5UEXKSFMYWGHH`
 
 **Stellar Expert:** https://stellar.expert/explorer/testnet/contract/CCO5IV7XJWN6ODK7TRIN2M5B6GSA6JQDUF2QW6IMJJS5UEXKSFMYWGHH
 
-</div>
-
-<br/>
-
 <img width="1879" height="849" alt="Screenshot 2026-03-31 204038" src="https://github.com/user-attachments/assets/d4caf103-d4fb-4585-9949-6928b5dc986a" />
-
-<br/>
 
 ## Prerequisites & Build
 
