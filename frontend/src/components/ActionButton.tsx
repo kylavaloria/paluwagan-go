@@ -1,5 +1,6 @@
 import { Loader } from "lucide-react";
 import type { ReactNode, MouseEvent } from "react";
+import { useTranslation } from "react-i18next";
 
 interface ActionButtonProps {
   children: ReactNode;
@@ -24,6 +25,7 @@ export default function ActionButton({
   title,
   className = "",
 }: ActionButtonProps) {
+  const { t } = useTranslation();
   const sizeClass = size === "sm" ? " btn--sm" : size === "lg" ? " btn--lg" : "";
   const widthClass = fullWidth ? " btn--full" : "";
 
@@ -37,7 +39,7 @@ export default function ActionButton({
       {loading ? (
         <>
           <Loader size={size === "sm" ? 12 : 16} className="btn-spinner" />
-          Please wait...
+          {t("common.pleaseWait")}
         </>
       ) : (
         children

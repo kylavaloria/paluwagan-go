@@ -1,4 +1,5 @@
 import StatusBadge from "./StatusBadge";
+import { useTranslation } from "react-i18next";
 
 interface PaymentStatusRowProps {
   address: string;
@@ -18,11 +19,12 @@ export default function PaymentStatusRow({
   isYou,
   actionButton,
 }: PaymentStatusRowProps) {
+  const { t } = useTranslation();
   return (
     <div className="payment-row">
       <div className="payment-row-member">
         <span className="address">{truncate(address)}</span>
-        {isYou && <span className="badge badge--active">You</span>}
+        {isYou && <span className="badge badge--active">{t("common.you")}</span>}
       </div>
       <div className="payment-row-status">
         <StatusBadge status={status} />

@@ -1,13 +1,17 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useWallet } from "../hooks/useWallet";
 import { useToast } from "../hooks/useToast";
+import { useTranslation } from "react-i18next";
 import {
   getGroup,
   getGroupMembers,
   getPayoutOrder,
   getPayoutState,
   getPaymentStatus,
+  getUserTrust,
+  getUsername,
+  listPublicGroups,
   joinGroup,
   lockGroup,
   generatePayoutOrder,
@@ -20,6 +24,8 @@ import {
   inviteUser,
   type Group,
   type PayoutState,
+  type UserTrust,
+  type ListedGroup,
 } from "../lib/contract";
 import { getLatestLedgerSequence } from "../lib/stellar";
 import { addMyGroup } from "../lib/store";
@@ -74,6 +80,7 @@ export default function GroupDetailsPage() {
   const { address } = useWallet();
   const { showToast } = useToast();
   const navigate = useNavigate();
+  const { t } = useTranslation();
 
   const [group, setGroup] = useState<Group | null>(null);
   const [members, setMembers] = useState<string[]>([]);
@@ -86,6 +93,16 @@ export default function GroupDetailsPage() {
 
   const [joinIdInput, setJoinIdInput] = useState("");
   const [openingGroup, setOpeningGroup] = useState(false);
+  const [trustByAddress, setTrustByAddress] = useState<Record<string, UserTrust | null>>({});
+  const [trustLoading, setTrustLoading] = useState(false);
+  const [usernameByAddress, setUsernameByAddress] = useState<Record<string, string | null>>({});
+  const [usernameLoading, setUsernameLoading] = useState(false);
+  const [publicGroups, setPublicGroups] = useState<ListedGroup[]>([]);
+  const [publicGroupsLoading, setPublicGroupsLoading] = useState(false);
+  const [publicGroupsError, setPublicGroupsError] = useState<string | null>(null);
+  const [publicGroupsHasMore, setPublicGroupsHasMore] = useState(true);
+  const publicGroupsLoadingRef = useRef(false);
+  const publicGroupsNextStartRef = useRef(1);
 
   // Action states
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -189,12 +206,115 @@ export default function GroupDetailsPage() {
     }
   }, [address, group, members, groupId, route.kind]);
 
+  useEffect(() => {
+    if (route.kind !== "group" || members.length === 0) {
+      setTrustByAddress({});
+      setTrustLoading(false);
+      return;
+    }
+
+    const unique = Array.from(new Set(members));
+    let cancelled = false;
+    setTrustLoading(true);
+
+    (async () => {
+      const results = await Promise.all(
+        unique.map(async (addr) => {
+          try {
+            const trust = await getUserTrust(addr);
+            return [addr, trust] as const;
+          } catch {
+            return [addr, null] as const;
+          }
+        }),
+      );
+
+      if (cancelled) return;
+      setTrustByAddress(Object.fromEntries(results));
+      setTrustLoading(false);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [route.kind, members]);
+
+  useEffect(() => {
+    if (route.kind !== "group" || members.length === 0) {
+      setUsernameByAddress({});
+      setUsernameLoading(false);
+      return;
+    }
+
+    const unique = Array.from(new Set(members));
+    let cancelled = false;
+    setUsernameLoading(true);
+
+    (async () => {
+      const results = await Promise.all(
+        unique.map(async (addr) => {
+          try {
+            const uname = await getUsername(addr);
+            return [addr, uname] as const;
+          } catch {
+            return [addr, null] as const;
+          }
+        }),
+      );
+
+      if (cancelled) return;
+      setUsernameByAddress(Object.fromEntries(results));
+      setUsernameLoading(false);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [route.kind, members]);
+
+  const loadPublicGroups = useCallback(async (opts?: { reset?: boolean }) => {
+    const pageSize = 25;
+    if (publicGroupsLoadingRef.current) return;
+    publicGroupsLoadingRef.current = true;
+    setPublicGroupsLoading(true);
+    setPublicGroupsError(null);
+
+    try {
+      const start = opts?.reset ? 1 : publicGroupsNextStartRef.current;
+      const page = await listPublicGroups(start, pageSize);
+
+      setPublicGroups((prev) => (opts?.reset ? page : [...prev, ...page]));
+      const nextStart = start + pageSize;
+      publicGroupsNextStartRef.current = nextStart;
+      setPublicGroupsHasMore(page.length === pageSize);
+    } catch (err) {
+      setPublicGroupsError(friendlyError(err));
+    } finally {
+      publicGroupsLoadingRef.current = false;
+      setPublicGroupsLoading(false);
+    }
+  }, [listPublicGroups]);
+
+  useEffect(() => {
+    if (route.kind !== "hub") {
+      setPublicGroups([]);
+      setPublicGroupsError(null);
+      setPublicGroupsLoading(false);
+      setPublicGroupsHasMore(true);
+      publicGroupsLoadingRef.current = false;
+      publicGroupsNextStartRef.current = 1;
+      return;
+    }
+    publicGroupsNextStartRef.current = 1;
+    loadPublicGroups({ reset: true });
+  }, [route.kind, loadPublicGroups]);
+
   const openGroupFromInput = async () => {
     const cleaned = joinIdInput.trim().replace(/.*\/group\//, "").replace(/^#/, "");
     const id = parseInt(cleaned, 10);
 
     if (isNaN(id) || id < 1) {
-      showToast("error", "Invalid group number", "Please enter a valid group number.");
+      showToast("error", t("group.invalidGroupNumberTitle"), t("group.invalidGroupNumberMsg"));
       return;
     }
 
@@ -203,7 +323,7 @@ export default function GroupDetailsPage() {
       await getGroup(id);
       navigate(`/group/${id}`);
     } catch (err) {
-      showToast("error", "Group not found", friendlyError(err));
+      showToast("error", t("group.groupNotFoundTitle"), friendlyError(err));
     } finally {
       setOpeningGroup(false);
     }
@@ -216,7 +336,7 @@ export default function GroupDetailsPage() {
       showToast("success", successMsg);
       await fetchData();
     } catch (err) {
-      showToast("error", "Action failed", friendlyError(err));
+      showToast("error", t("group.actionFailedTitle"), friendlyError(err));
     } finally {
       setActionLoading(null);
     }
@@ -227,45 +347,45 @@ export default function GroupDetailsPage() {
       return joinGroup(groupId, address!).then(() => {
         addMyGroup(address!, groupId, "member");
       });
-    }, "You've joined the group!");
+    }, t("group.joinedToast"));
 
   const handleLock = () =>
-    runAction("lock", () => lockGroup(groupId, address!), "Group started! 🎉 Members can now begin contributing.");
+    runAction("lock", () => lockGroup(groupId, address!), t("group.startedToast"));
 
   const handleGenerateOrder = () =>
-    runAction("generateOrder", () => generatePayoutOrder(groupId, address!), "Payout order has been set!");
+    runAction("generateOrder", () => generatePayoutOrder(groupId, address!), t("group.payoutOrderSetToast"));
 
   const handleConfirmSender = () =>
-    runAction("confirmSender", () => confirmPaymentSender(groupId, group!.current_cycle, address!), "Payment confirmed! Waiting for organizer to verify.");
+    runAction("confirmSender", () => confirmPaymentSender(groupId, group!.current_cycle, address!), t("group.paymentConfirmedToast"));
 
   const handleConfirmReceiver = (sender: string) =>
-    runAction(`confirmReceiver-${sender}`, () => confirmPaymentReceiver(groupId, group!.current_cycle, address!, sender), "Payment from member confirmed!");
+    runAction(`confirmReceiver-${sender}`, () => confirmPaymentReceiver(groupId, group!.current_cycle, address!, sender), t("group.memberPaymentConfirmedToast"));
 
   const handleReleasePayout = () =>
     runAction(
       "release",
       () => releaseCyclePayout(groupId, address!),
-      "Payout marked as released. The recipient can confirm receipt on-chain.",
+      t("group.payoutReleasedToast"),
     );
 
   const handleConfirmPayoutReceived = () =>
     runAction(
       "confirmPayoutReceived",
       () => confirmPayoutReceived(groupId, group!.current_cycle, address!),
-      "Receipt confirmed! ✅",
+      t("group.receiptConfirmedToast"),
     );
 
   const handleAdvanceCycle = () =>
-    runAction("advance", () => advanceCycle(groupId, address!), "Moved to the next round!");
+    runAction("advance", () => advanceCycle(groupId, address!), t("group.nextRoundToast"));
 
   const handleMarkMissed = () =>
-    runAction("markMissed", () => markMissedPayments(groupId, address!), "Missed payments have been marked.");
+    runAction("markMissed", () => markMissedPayments(groupId, address!), t("group.missedMarkedToast"));
 
   const handleInvite = () => {
     if (!inviteAddress.trim()) return;
     runAction("invite", () => inviteUser(groupId, address!, inviteAddress.trim()).then(() => {
       setInviteAddress("");
-    }), "Invitation sent!");
+    }), t("group.inviteSentToast"));
   };
 
   const copyLink = () => {
@@ -279,18 +399,17 @@ export default function GroupDetailsPage() {
     <div className="panel" style={dense ? { marginBottom: "var(--space-4)" } : undefined}>
       <h2 className="panel-title" style={dense ? { fontSize: "var(--font-size-base)" } : undefined}>
         <Search size={dense ? 18 : 20} />
-        {dense ? "Open another group" : "Find a group"}
+        {dense ? t("groupHub.openAnother") : t("groupHub.findTitle")}
       </h2>
       {!dense && (
         <p className="text-sm text-muted mb-4">
-          Enter the group number from your organizer. Public groups can be opened by anyone with the link;
-          private groups require an on-chain invite.
+          {t("groupHub.findDesc")}
         </p>
       )}
       <div className="inline-form" style={{ maxWidth: dense ? "100%" : 560, flexWrap: "wrap", gap: "var(--space-2)" }}>
         <input
           className="form-input"
-          placeholder="e.g. 42 or #42 or …/group/42"
+          placeholder={t("groupHub.placeholder")}
           value={joinIdInput}
           onChange={(e) => setJoinIdInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && openGroupFromInput()}
@@ -303,11 +422,11 @@ export default function GroupDetailsPage() {
           disabled={!joinIdInput.trim()}
         >
           <Search size={16} />
-          Open
+          {t("common.open")}
         </ActionButton>
         <ActionButton variant="secondary" onClick={() => navigate("/create")}>
           <Plus size={18} />
-          New group
+          {t("common.newGroup")}
         </ActionButton>
       </div>
     </div>
@@ -316,28 +435,135 @@ export default function GroupDetailsPage() {
   if (route.kind === "hub") {
     if (!address) return null;
     return (
-      <div className="container" style={{ paddingBottom: "var(--space-16)" }}>
+      <div className="container container--wide" style={{ paddingTop: "var(--space-3)", paddingBottom: "var(--space-16)" }}>
         <div className="page-header">
-          <h1 className="page-title">Group</h1>
-          <p className="page-subtitle">Open a group by number or start a new one.</p>
+          <h1 className="page-title">{t("groupHub.title")}</h1>
+          <p className="page-subtitle">{t("groupHub.subtitle")}</p>
         </div>
-        <GroupQuickNav />
+        <div className="page-grid group-hub-grid">
+          <div>
+            <GroupQuickNav />
+            <div className="panel">
+              <h2 className="panel-title">
+                <Users size={18} />
+                {t("groupHub.publicGroups")}
+              </h2>
+              <div className="card">
+                <div className="card-body" style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
+                  {publicGroupsError ? (
+                    <div className="text-sm" style={{ color: "var(--danger)" }}>
+                      {publicGroupsError}
+                    </div>
+                  ) : null}
+
+                  {publicGroups.length === 0 && !publicGroupsLoading ? (
+                    <div className="text-sm text-muted">
+                      {t("groupHub.noneFound")}
+                    </div>
+                  ) : null}
+
+                  {publicGroups.map(({ id, group }) => (
+                    <div key={id} className="payment-row">
+                      <div className="payment-row-member" style={{ flexDirection: "column", alignItems: "flex-start", gap: 6 }}>
+                        <div className="flex items-center gap-2" style={{ minWidth: 0 }}>
+                          <span style={{ fontWeight: 700, color: "var(--text-heading)" }}>
+                            {group.name ? group.name : `Group #${id}`}
+                          </span>
+                          <StatusBadge status={group.status} />
+                          <span className="badge badge--neutral">
+                            {group.current_members}/{group.max_members}
+                          </span>
+                        </div>
+                        <div className="text-sm text-muted">
+                          <span style={{ fontWeight: 600 }}>#{id}</span>
+                          {" · "}
+                          {group.schedule}
+                          {" · "}
+                          {group.payout_type}
+                        </div>
+                      </div>
+                      <div className="payment-row-actions">
+                        <ActionButton
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => navigate(`/group/${id}`)}
+                        >
+                          {t("common.open")}
+                        </ActionButton>
+                      </div>
+                    </div>
+                  ))}
+
+                  <div className="flex items-center justify-between" style={{ marginTop: "var(--space-2)" }}>
+                    <ActionButton
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => loadPublicGroups({ reset: true })}
+                      loading={publicGroupsLoading}
+                    >
+                      {t("common.refresh")}
+                    </ActionButton>
+                    {publicGroupsHasMore ? (
+                      <ActionButton
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => loadPublicGroups()}
+                        loading={publicGroupsLoading}
+                        disabled={publicGroupsLoading}
+                      >
+                        {t("common.loadMore")}
+                      </ActionButton>
+                    ) : (
+                      <span className="text-sm text-muted"> </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="group-hub-sidebar">
+            <div className="panel">
+              <h2 className="panel-title">
+                <Shield size={18} />
+                {t("groupHub.quickTips")}
+              </h2>
+              <div className="card">
+                <div className="card-body" style={{ display: "grid", gridTemplateColumns: "1fr", gap: "var(--space-4)" }}>
+                  <div>
+                    <p className="text-sm font-semibold mb-2">{t("groupHub.tipPublicTitle")}</p>
+                    <p className="text-sm text-muted">{t("groupHub.tipPublicDesc")}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold mb-2">{t("groupHub.tipPrivateTitle")}</p>
+                    <p className="text-sm text-muted">{t("groupHub.tipPrivateDesc")}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold mb-2">{t("groupHub.tipShareTitle")}</p>
+                    <p className="text-sm text-muted">{t("groupHub.tipShareDesc")}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
 
   if (route.kind === "invalid") {
     return (
-      <div className="container container--narrow" style={{ paddingBottom: "var(--space-16)" }}>
+      <div className="container container--narrow" style={{ paddingTop: "var(--space-3)", paddingBottom: "var(--space-16)" }}>
         <div className="empty-state" style={{ paddingTop: "var(--space-16)" }}>
           <div className="empty-state-icon">
             <AlertTriangle size={28} />
           </div>
-          <div className="empty-state-title">Invalid group number</div>
-          <p className="empty-state-desc">Use a positive whole number in the URL, for example <code>#/group/1</code>.</p>
+          <div className="empty-state-title">{t("groupDetails.invalidTitle")}</div>
+          <p className="empty-state-desc">
+            {t("groupDetails.invalidDesc")} <code>#/group/1</code>.
+          </p>
         </div>
         {address ? <GroupQuickNav /> : (
-          <p className="text-sm text-muted text-center">Connect your wallet to open or create a group.</p>
+          <p className="text-sm text-muted text-center">{t("groupDetails.connectWalletHint")}</p>
         )}
       </div>
     );
@@ -345,10 +571,10 @@ export default function GroupDetailsPage() {
 
   if (loading) {
     return (
-      <div className="container">
+      <div className="container" style={{ paddingTop: "var(--space-3)" }}>
         <div className="loading-screen">
           <div className="loading-spinner"></div>
-          <p>Loading group details...</p>
+          <p>{t("groupDetails.loading")}</p>
         </div>
       </div>
     );
@@ -356,16 +582,16 @@ export default function GroupDetailsPage() {
 
   if (error || !group) {
     return (
-      <div className="container container--narrow">
+      <div className="container container--narrow" style={{ paddingTop: "var(--space-3)" }}>
         <div className="empty-state" style={{ paddingTop: "var(--space-16)" }}>
           <div className="empty-state-icon">
             <AlertTriangle size={28} />
           </div>
-          <div className="empty-state-title">Group Not Found</div>
-          <p className="empty-state-desc">{error || "We couldn't load this group."}</p>
+          <div className="empty-state-title">{t("groupDetails.notFoundTitle")}</div>
+          <p className="empty-state-desc">{error || t("groupDetails.notFoundDesc")}</p>
           {address ? <GroupQuickNav /> : null}
           <ActionButton variant="ghost" onClick={() => navigate("/group")}>
-            Back to find group
+            {t("groupDetails.backToFind")}
           </ActionButton>
         </div>
       </div>
@@ -393,7 +619,7 @@ export default function GroupDetailsPage() {
   const statusStepIndex = group.status === "WaitingForMembers" ? 0 : group.status === "Active" ? 1 : 2;
 
   return (
-    <div className="container" style={{ paddingBottom: "var(--space-16)" }}>
+    <div className="container" style={{ paddingTop: "var(--space-3)", paddingBottom: "var(--space-16)" }}>
       {address ? <GroupQuickNav dense /> : null}
 
       {/* Header */}
@@ -408,19 +634,24 @@ export default function GroupDetailsPage() {
           <p className="page-subtitle">
             <span style={{ fontWeight: 600 }}>#{groupId}</span>
             {" · "}
-            {group.current_members}/{group.max_members} members
-            {group.status === "Active" && ` · Round ${group.current_cycle} of ${group.total_cycles}`}
+            {group.current_members}/{group.max_members} {t("groupDetails.members")}
+            {group.status === "Active" && (
+              <>
+                {" · "}
+                {t("groupDetails.roundOf", { current: group.current_cycle, total: group.total_cycles })}
+              </>
+            )}
           </p>
         </div>
         <ActionButton variant="ghost" size="sm" onClick={copyLink}>
           {linkCopied ? <Check size={14} /> : <Copy size={14} />}
-          {linkCopied ? "Copied!" : "Share Link"}
+          {linkCopied ? t("groupDetails.copied") : t("groupDetails.shareLink")}
         </ActionButton>
       </div>
 
       {/* Status Flow */}
       <div className="status-flow">
-        {["Waiting for Members", "Active", "Completed 🎉"].map((label, i) => (
+        {[t("groupDetails.status.waiting"), t("groupDetails.status.active"), t("groupDetails.status.completed")].map((label, i) => (
           <div key={label} className="flex items-center gap-2">
             {i > 0 && <ChevronRight size={16} className="status-flow-arrow" />}
             <span
@@ -437,36 +668,35 @@ export default function GroupDetailsPage() {
       {canJoin && group.visibility === "Public" && (
         <div className="banner banner--info">
           <Users size={18} />
-          This group is open! You can join and start saving together.
+          {t("groupDetails.bannerOpen")}
         </div>
       )}
 
       {isCreator && group.status === "WaitingForMembers" && group.current_members === group.max_members && !group.locked && (
         <div className="banner banner--success">
           <CheckCircle size={18} />
-          All spots are filled! You can now start the group.
+          {t("groupDetails.bannerAllSpots")}
         </div>
       )}
 
       {isCreator && group.status === "Active" && payoutOrder.length === 0 && (
         <div className="banner banner--warning">
           <AlertTriangle size={18} />
-          The group is active but the payout order hasn't been set yet.
+          {t("groupDetails.bannerPayoutOrderMissing")}
         </div>
       )}
 
       {isCreator && isOverdue && group.status === "Active" && (
         <div className="banner banner--warning">
           <Clock size={18} />
-          Round deadline has passed. You can mark missed payments, or release the payout — unpaid members who
-          still owe this round will be recorded as missed in trust scores.
+          {t("groupDetails.bannerOverdue")}
         </div>
       )}
 
       {group.status === "Active" && payoutState === "ReleasedByOrganizer" && (
         <div className="banner banner--info">
           <CheckCircle size={18} />
-          Payout has been released by the organizer. Waiting for the recipient to confirm receipt.
+          {t("groupDetails.bannerReleased")}
         </div>
       )}
 
@@ -480,7 +710,7 @@ export default function GroupDetailsPage() {
             loading={actionLoading === "join"}
           >
             <UserPlus size={18} />
-            Join This Group
+            {t("groupDetails.joinThisGroup")}
           </ActionButton>
         </div>
       )}
@@ -495,7 +725,7 @@ export default function GroupDetailsPage() {
             loading={actionLoading === "confirmPayoutReceived"}
           >
             <CheckCircle size={18} />
-            I received the payout
+            {t("groupDetails.receivedPayout")}
           </ActionButton>
         </div>
       )}
@@ -504,39 +734,53 @@ export default function GroupDetailsPage() {
       <div className="panel">
         <h2 className="panel-title">
           <Shield size={18} />
-          Group Details
+          {t("groupDetails.title")}
         </h2>
         <div className="card">
           <div className="card-body">
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-3)", fontSize: "var(--font-size-sm)" }}>
-              <span className="text-muted">Contribution:</span>
-              <span className="font-semibold">{Number(group.contribution_amount) / 1e7} XLM per round</span>
-              <span className="text-muted">Schedule:</span>
+              <span className="text-muted">{t("groupDetails.contribution")}:</span>
+              <span className="font-semibold">
+                {Number(group.contribution_amount) / 1e7} {t("groupDetails.xlmPerRound")}
+              </span>
+              <span className="text-muted">{t("groupDetails.schedule")}:</span>
               <span style={{ textTransform: "capitalize" }}>{group.schedule}</span>
-              <span className="text-muted">Payout type:</span>
+              <span className="text-muted">{t("groupDetails.payoutType")}:</span>
               <span style={{ textTransform: "capitalize" }}>{group.payout_type}</span>
-              <span className="text-muted">Payout order:</span>
-              <span>{group.payout_order_mode === "JoinOrder" ? "First come, first served" : "Randomized"}</span>
-              <span className="text-muted">Visibility:</span>
-              <span>{group.visibility === "Public" ? "Public (anyone can join)" : "Private (invite only)"}</span>
-              <span className="text-muted">Organizer role:</span>
-              <span>{group.organizer_role === "OrganizerAsMember" ? "Organizer & Member" : "Organizer only"}</span>
+              <span className="text-muted">{t("groupDetails.payoutOrder")}:</span>
+              <span>
+                {group.payout_order_mode === "JoinOrder"
+                  ? t("groupDetails.payoutOrderJoin")
+                  : t("groupDetails.payoutOrderRandom")}
+              </span>
+              <span className="text-muted">{t("groupDetails.visibility")}:</span>
+              <span>
+                {group.visibility === "Public"
+                  ? t("groupDetails.visibilityPublic")
+                  : t("groupDetails.visibilityPrivate")}
+              </span>
+              <span className="text-muted">{t("groupDetails.organizerRole")}:</span>
+              <span>
+                {group.organizer_role === "OrganizerAsMember"
+                  ? t("groupDetails.organizerRoleMember")
+                  : t("groupDetails.organizerRoleOnly")}
+              </span>
               {group.interest_bps > 0 && (
                 <>
-                  <span className="text-muted">Interest:</span>
+                  <span className="text-muted">{t("groupDetails.interest")}:</span>
                   <span>{(group.interest_bps / 100).toFixed(2)}%</span>
                 </>
               )}
               {group.status === "Active" && group.cycle_due_ledger > 0 && (
                 <>
-                  <span className="text-muted">Round deadline:</span>
+                  <span className="text-muted">{t("groupDetails.roundDeadline")}:</span>
                   <span>
-                    Ledger #{group.cycle_due_ledger}
+                    {t("groupDetails.ledgerNum", { num: group.cycle_due_ledger })}
                     {isOverdue ? (
-                      <span className="badge badge--danger" style={{ marginLeft: 8 }}>Overdue</span>
+                      <span className="badge badge--danger" style={{ marginLeft: 8 }}>{t("groupDetails.overdue")}</span>
                     ) : (
                       <span className="badge badge--active" style={{ marginLeft: 8 }}>
-                        ~{Math.max(0, group.cycle_due_ledger - currentLedger)} ledgers left
+                        {t("groupDetails.ledgersLeft", { count: Math.max(0, group.cycle_due_ledger - currentLedger) })}
                       </span>
                     )}
                   </span>
@@ -544,11 +788,11 @@ export default function GroupDetailsPage() {
               )}
               {currentRecipient && (
                 <>
-                  <span className="text-muted">This round's recipient:</span>
+                  <span className="text-muted">{t("groupDetails.thisRecipient")}:</span>
                   <span className="address">
                     {currentRecipient.slice(0, 6)}...{currentRecipient.slice(-4)}
                     {currentRecipient === address && (
-                      <span className="badge badge--success" style={{ marginLeft: 8 }}>You!</span>
+                      <span className="badge badge--success" style={{ marginLeft: 8 }}>{t("groupDetails.you")}</span>
                     )}
                   </span>
                 </>
@@ -562,12 +806,12 @@ export default function GroupDetailsPage() {
       <div className="panel">
         <h2 className="panel-title">
           <Users size={18} />
-          Members ({members.length}/{group.max_members})
+          {t("groupDetails.membersTitle", { current: members.length, max: group.max_members })}
         </h2>
         {members.length === 0 ? (
           <div className="card">
             <div className="card-body text-center text-muted">
-              No members yet.
+              {t("groupDetails.noMembers")}
             </div>
           </div>
         ) : (
@@ -579,6 +823,12 @@ export default function GroupDetailsPage() {
                 currentCycle={group.current_cycle}
                 creatorAddress={group.creator}
                 currentUserAddress={address}
+                trustScores={Object.fromEntries(
+                  members.map((m) => [m, trustByAddress[m]?.reliability_score]),
+                )}
+                trustLoading={trustLoading}
+                usernames={Object.fromEntries(members.map((m) => [m, usernameByAddress[m]]))}
+                usernamesLoading={usernameLoading}
               />
             </div>
           </div>
@@ -590,7 +840,7 @@ export default function GroupDetailsPage() {
         <div className="panel">
           <h2 className="panel-title">
             <Send size={18} />
-            Payment Status — Round {group.current_cycle}
+            {t("groupDetails.paymentStatusTitle", { round: group.current_cycle })}
           </h2>
           <div className="payment-matrix">
             {payments.map((p) => {
@@ -608,7 +858,7 @@ export default function GroupDetailsPage() {
                     onClick={handleConfirmSender}
                     loading={actionLoading === "confirmSender"}
                   >
-                    I've Sent My Payment
+                    {t("groupDetails.sentMyPayment")}
                   </ActionButton>
                 );
               }
@@ -621,7 +871,7 @@ export default function GroupDetailsPage() {
                     onClick={() => handleConfirmReceiver(p.address)}
                     loading={actionLoading === `confirmReceiver-${p.address}`}
                   >
-                    Confirm Receipt
+                    {t("groupDetails.confirmReceipt")}
                   </ActionButton>
                 );
               }
@@ -645,19 +895,19 @@ export default function GroupDetailsPage() {
         <div className="panel">
           <h2 className="panel-title">
             <Award size={18} />
-            Organizer Actions
-            <span className="panel-admin-badge">Organizer</span>
+            {t("groupDetails.organizerActions")}
+            <span className="panel-admin-badge">{t("groupDetails.organizerBadge")}</span>
           </h2>
           <div className="card">
             <div className="card-body">
               <div className="flex flex-col gap-3">
                 {group.visibility === "Private" && !group.locked && (
                   <div>
-                    <p className="text-sm font-semibold mb-2">Invite a member</p>
+                    <p className="text-sm font-semibold mb-2">{t("groupDetails.inviteMember")}</p>
                     <div className="inline-form">
                       <input
                         className="form-input"
-                        placeholder="Paste wallet address (G...)"
+                        placeholder={t("groupDetails.invitePlaceholder")}
                         value={inviteAddress}
                         onChange={(e) => setInviteAddress(e.target.value)}
                       />
@@ -669,7 +919,7 @@ export default function GroupDetailsPage() {
                         disabled={!inviteAddress.trim()}
                       >
                         <UserPlus size={14} />
-                        Invite
+                        {t("groupDetails.invite")}
                       </ActionButton>
                     </div>
                   </div>
@@ -681,11 +931,11 @@ export default function GroupDetailsPage() {
                     onClick={handleLock}
                     loading={actionLoading === "lock"}
                     disabled={group.current_members !== group.max_members}
-                    title={group.current_members !== group.max_members ? "All spots need to be filled first" : ""}
+                    title={group.current_members !== group.max_members ? t("groupDetails.allSpotsFirst") : ""}
                     fullWidth
                   >
                     <Lock size={16} />
-                    Start the Group
+                    {t("groupDetails.startGroup")}
                   </ActionButton>
                 )}
 
@@ -697,7 +947,7 @@ export default function GroupDetailsPage() {
                     fullWidth
                   >
                     <Shuffle size={16} />
-                    Set Payout Order
+                    {t("groupDetails.setPayoutOrder")}
                   </ActionButton>
                 )}
 
@@ -709,7 +959,9 @@ export default function GroupDetailsPage() {
                     fullWidth
                   >
                     <CheckCircle size={16} />
-                    Release Payout to {currentRecipient ? `${currentRecipient.slice(0, 6)}...` : "Recipient"}
+                    {t("groupDetails.releasePayoutTo", {
+                      recipient: currentRecipient ? `${currentRecipient.slice(0, 6)}...` : t("groupDetails.recipientFallback"),
+                    })}
                   </ActionButton>
                 )}
 
@@ -719,11 +971,11 @@ export default function GroupDetailsPage() {
                     onClick={handleAdvanceCycle}
                     loading={actionLoading === "advance"}
                     disabled={!canAdvance}
-                    title={!canAdvance ? "Waiting for recipient to confirm payout receipt" : ""}
+                    title={!canAdvance ? t("groupDetails.waitingRecipientReceipt") : ""}
                     fullWidth
                   >
                     <ArrowRight size={16} />
-                    Move to Next Round
+                    {t("groupDetails.nextRound")}
                   </ActionButton>
                 )}
 
@@ -735,7 +987,7 @@ export default function GroupDetailsPage() {
                     fullWidth
                   >
                     <AlertTriangle size={16} />
-                    Mark Missed Payments
+                    {t("groupDetails.markMissed")}
                   </ActionButton>
                 )}
               </div>
@@ -747,7 +999,7 @@ export default function GroupDetailsPage() {
       {group.status === "Completed" && (
         <div className="banner banner--success">
           <CheckCircle size={18} />
-          This group has completed all rounds! Everyone has received their payout. 🎉
+          {t("groupDetails.completedBanner")}
         </div>
       )}
     </div>

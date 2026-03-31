@@ -1,8 +1,10 @@
 import { Wallet, LogOut, Loader } from "lucide-react";
 import { useWallet } from "../hooks/useWallet";
+import { useTranslation } from "react-i18next";
 
 export default function WalletButton() {
   const { address, isConnecting, isAvailable, connect, disconnect, shortAddress } = useWallet();
+  const { t } = useTranslation();
 
   if (isAvailable === false) {
     return (
@@ -13,7 +15,7 @@ export default function WalletButton() {
         className="btn btn--secondary btn--sm"
       >
         <Wallet size={14} />
-        Install Wallet
+        {t("wallet.install")}
       </a>
     );
   }
@@ -25,7 +27,7 @@ export default function WalletButton() {
           <Wallet size={14} />
           {shortAddress}
         </span>
-        <button className="btn btn--ghost btn--sm" onClick={disconnect} title="Disconnect">
+        <button className="btn btn--ghost btn--sm" onClick={disconnect} title={t("wallet.disconnect")}>
           <LogOut size={14} />
         </button>
       </div>
@@ -41,12 +43,12 @@ export default function WalletButton() {
       {isConnecting ? (
         <>
           <Loader size={14} className="btn-spinner" />
-          Connecting...
+          {t("wallet.connecting")}
         </>
       ) : (
         <>
           <Wallet size={14} />
-          Connect Wallet
+          {t("wallet.connect")}
         </>
       )}
     </button>

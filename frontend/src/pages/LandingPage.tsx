@@ -1,5 +1,7 @@
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useWallet } from "../hooks/useWallet";
+import { useTranslation } from "react-i18next";
+import heroPerson from "../assets/hero-person.png";
 import {
   Shield,
   Users,
@@ -13,12 +15,15 @@ import { useEffect } from "react";
 export default function LandingPage() {
   const { address, connect, isConnecting, isAvailable } = useWallet();
   const navigate = useNavigate();
+  const location = useLocation();
+  const allowLanding = Boolean((location.state as { allowLanding?: boolean } | null)?.allowLanding);
+  const { t } = useTranslation();
 
   useEffect(() => {
-    if (address) {
+    if (address && !allowLanding) {
       navigate("/group", { replace: true });
     }
-  }, [address, navigate]);
+  }, [address, allowLanding, navigate]);
 
   const handleConnect = async () => {
     const addr = await connect();
@@ -35,13 +40,12 @@ export default function LandingPage() {
       <section className="hero">
         <div className="container">
           <div className="hero-grid">
-            <div>
+            <div className="hero-copy">
               <h1 className="hero-title">
-                Paluwagan na walang hulaan kung legit.
+                {t("landing.heroTitle")}
               </h1>
               <p className="hero-subtitle">
-                Track contributions, verify payouts, and build trust through
-                transparent group records — all powered by blockchain.
+                {t("landing.heroSubtitle")}
               </p>
               <div className="hero-actions">
                 <button
@@ -49,55 +53,39 @@ export default function LandingPage() {
                   onClick={handleConnect}
                   disabled={isConnecting || isAvailable === false}
                 >
-                  {isConnecting ? "Connecting..." : "Create a Group"}
+                  {isConnecting ? t("landing.connecting") : t("landing.createGroupCta")}
                 </button>
                 <button
                   className="btn btn--secondary btn--lg"
                   onClick={handleConnectAndJoin}
                   disabled={isConnecting || isAvailable === false}
                 >
-                  Join a Group
+                  {t("landing.joinGroupCta")}
                 </button>
               </div>
               {isAvailable === false && (
                 <p className="text-sm text-muted mt-4">
-                  To get started, install the{" "}
+                  {t("landing.installPrefix")}{" "}
                   <a
                     href="https://www.freighter.app/"
                     target="_blank"
                     rel="noopener noreferrer"
                   >
-                    Freighter wallet extension
+                    {t("landing.freighterLink")}
                   </a>{" "}
-                  and refresh this page.
+                  {t("landing.installSuffix")}
                 </p>
               )}
             </div>
 
-            <div className="hero-preview">
-              <div className="flex items-center justify-between mb-4">
-                <span style={{ fontWeight: 700, fontSize: "var(--font-size-base)" }}>
-                  Dashboard Overview
-                </span>
-                <span className="badge badge--active">Active</span>
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-3)", marginBottom: "var(--space-4)" }}>
-                <div className="stat-card">
-                  <div className="stat-value" style={{ color: "var(--text-heading)" }}>5</div>
-                  <div className="stat-label">Active Groups</div>
-                </div>
-                <div className="stat-card">
-                  <div className="stat-value" style={{ color: "var(--accent)" }}>98%</div>
-                  <div className="stat-label">Trust Score</div>
-                </div>
-              </div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm text-muted">Cycle Progress</span>
-                <span className="text-sm font-semibold">8 of 10 confirmed</span>
-              </div>
-              <div className="progress">
-                <div className="progress-bar" style={{ width: "80%" }}></div>
-              </div>
+            <div className="hero-art">
+              <img
+                src={heroPerson}
+                alt={t("landing.heroImageAlt")}
+                className="hero-art-img"
+                loading="eager"
+                decoding="async"
+              />
             </div>
           </div>
         </div>
@@ -106,9 +94,9 @@ export default function LandingPage() {
       <section className="section">
         <div className="container">
           <div className="section-header">
-            <h2 className="section-title">Built for Trust and Transparency</h2>
+            <h2 className="section-title">{t("landing.trustSectionTitle")}</h2>
             <p className="section-subtitle">
-              Everything you need to run a legitimate paluwagan
+              {t("landing.trustSectionSubtitle")}
             </p>
           </div>
           <div className="features-grid">
@@ -116,30 +104,27 @@ export default function LandingPage() {
               <div className="feature-icon">
                 <Shield size={24} />
               </div>
-              <h3 className="feature-title">Transparent Records</h3>
+              <h3 className="feature-title">{t("landing.features.transparentTitle")}</h3>
               <p className="feature-desc">
-                Every contribution and payout is recorded on the blockchain.
-                No more "sabi ni ganito" — everyone can verify.
+                {t("landing.features.transparentDesc")}
               </p>
             </div>
             <div className="card feature-card">
               <div className="feature-icon">
                 <Users size={24} />
               </div>
-              <h3 className="feature-title">Trust Scores</h3>
+              <h3 className="feature-title">{t("landing.features.trustTitle")}</h3>
               <p className="feature-desc">
-                Members build a reliability score based on their payment history.
-                See who's trustworthy before you join.
+                {t("landing.features.trustDesc")}
               </p>
             </div>
             <div className="card feature-card">
               <div className="feature-icon">
                 <BarChart3 size={24} />
               </div>
-              <h3 className="feature-title">Payment Tracking</h3>
+              <h3 className="feature-title">{t("landing.features.trackingTitle")}</h3>
               <p className="feature-desc">
-                Track who has paid and who hasn't, in real time.
-                Both sender and receiver confirm each payment.
+                {t("landing.features.trackingDesc")}
               </p>
             </div>
           </div>
@@ -149,34 +134,31 @@ export default function LandingPage() {
       <section className="section" style={{ background: "var(--bg-primary)" }}>
         <div className="container">
           <div className="section-header">
-            <h2 className="section-title">How It Works</h2>
+            <h2 className="section-title">{t("landing.howTitle")}</h2>
             <p className="section-subtitle">
-              Three simple steps to start saving together
+              {t("landing.howSubtitle")}
             </p>
           </div>
           <div className="steps-grid">
             <div className="step-card">
               <div className="step-number">1</div>
-              <h3 className="step-title">Create or Join</h3>
+              <h3 className="step-title">{t("landing.steps.oneTitle")}</h3>
               <p className="step-desc">
-                Start a new savings group or join one shared by a friend.
-                Set the contribution amount and schedule.
+                {t("landing.steps.oneDesc")}
               </p>
             </div>
             <div className="step-card">
               <div className="step-number">2</div>
-              <h3 className="step-title">Contribute Each Round</h3>
+              <h3 className="step-title">{t("landing.steps.twoTitle")}</h3>
               <p className="step-desc">
-                Everyone pays their share each round. Confirm your payment
-                and the organizer confirms receipt.
+                {t("landing.steps.twoDesc")}
               </p>
             </div>
             <div className="step-card">
               <div className="step-number">3</div>
-              <h3 className="step-title">Receive Your Payout</h3>
+              <h3 className="step-title">{t("landing.steps.threeTitle")}</h3>
               <p className="step-desc">
-                When it's your turn, the full pool goes to you.
-                Everyone takes a turn — fair and square.
+                {t("landing.steps.threeDesc")}
               </p>
             </div>
           </div>
@@ -188,7 +170,7 @@ export default function LandingPage() {
               disabled={isConnecting || isAvailable === false}
             >
               <CircleDollarSign size={20} />
-              Get Started
+              {t("landing.getStarted")}
               <ArrowRight size={18} />
             </button>
           </div>
@@ -200,11 +182,9 @@ export default function LandingPage() {
           <div className="feature-icon" style={{ margin: "0 auto var(--space-4)", background: "var(--accent-light)", color: "var(--accent)" }}>
             <CheckCircle size={24} />
           </div>
-          <h2 className="section-title">Your Reputation Matters</h2>
+          <h2 className="section-title">{t("landing.reputationTitle")}</h2>
           <p className="section-subtitle" style={{ maxWidth: 540, margin: "0 auto" }}>
-            Every payment you make builds your trust score. Members with higher
-            scores are more likely to be welcomed into groups. Pay on time,
-            build your rep.
+            {t("landing.reputationSubtitle")}
           </p>
         </div>
       </section>

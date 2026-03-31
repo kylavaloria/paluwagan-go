@@ -159,6 +159,69 @@ mod tests {
     }
 
     #[test]
+    fn test_set_and_get_username() {
+        let mut ctx = setup_ctx();
+        fix_ctx_addresses(&mut ctx);
+
+        let u = String::from_str(&ctx.env, "kyla_01");
+        ctx.client.set_username(&ctx.creator, &u);
+
+        let got = ctx.client.get_username(&ctx.creator);
+        assert_eq!(got, Some(u.clone()));
+
+        let owner = ctx.client.get_username_owner(&u);
+        assert_eq!(owner, Some(ctx.creator.clone()));
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_username_rejects_invalid_chars() {
+        let mut ctx = setup_ctx();
+        fix_ctx_addresses(&mut ctx);
+
+        // Uppercase + dash should fail.
+        ctx.client
+            .set_username(&ctx.creator, &String::from_str(&ctx.env, "Kyla-01"));
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_username_rejects_too_short() {
+        let mut ctx = setup_ctx();
+        fix_ctx_addresses(&mut ctx);
+
+        ctx.client
+            .set_username(&ctx.creator, &String::from_str(&ctx.env, "ab"));
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_username_uniqueness_enforced() {
+        let mut ctx = setup_ctx();
+        fix_ctx_addresses(&mut ctx);
+
+        let u = String::from_str(&ctx.env, "unique_1");
+        ctx.client.set_username(&ctx.creator, &u);
+        ctx.client.set_username(&ctx.alice, &u);
+    }
+
+    #[test]
+    fn test_username_can_rename_and_frees_old() {
+        let mut ctx = setup_ctx();
+        fix_ctx_addresses(&mut ctx);
+
+        let u1 = String::from_str(&ctx.env, "name_1");
+        let u2 = String::from_str(&ctx.env, "name_2");
+        ctx.client.set_username(&ctx.creator, &u1);
+        ctx.client.set_username(&ctx.creator, &u2);
+
+        assert_eq!(ctx.client.get_username(&ctx.creator), Some(u2.clone()));
+        // Old name should now be unowned.
+        assert_eq!(ctx.client.get_username_owner(&u1), None);
+        assert_eq!(ctx.client.get_username_owner(&u2), Some(ctx.creator.clone()));
+    }
+
+    #[test]
     fn test_create_group_org_only() {
         let mut ctx = setup_ctx();
         fix_ctx_addresses(&mut ctx);

@@ -33,6 +33,8 @@ pub enum ContractError {
     InvalidGroupName = 19,
     PayoutNotReleased = 20,
     PayoutRecipientNotConfirmed = 21,
+    InvalidUsername = 22,
+    UsernameTaken = 23,
 }
 
 #[contracttype]
@@ -131,6 +133,13 @@ pub struct UserTrust {
     pub reliability_score: Option<u32>,
 }
 
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ListedGroup {
+    pub id: u32,
+    pub group: Group,
+}
+
 impl Default for UserTrust {
     fn default() -> Self {
         Self {
@@ -161,6 +170,63 @@ pub enum DataKey {
     LateMarked(u32, u32, Address),
     MissedMarked(u32, u32, Address),
     UserTrust(Address),
+    Username(Address),
+    UsernameOwner(String),
+}
+
+fn validate_username(env: &Env, username: &String) {
+    let len = username.len();
+    // 3..=20 chars
+    if len < 3 || len > 20 {
+        panic_with_error!(env, ContractError::InvalidUsername);
+    }
+
+    // Only lowercase letters, digits, underscore.
+    let len_usize = len as usize;
+    let mut buf = [0u8; 20];
+    username.copy_into_slice(&mut buf[..len_usize]);
+
+    let mut i = 0usize;
+    while i < len_usize {
+        let b = buf[i];
+        let ok = (b >= b'a' && b <= b'z')
+            || (b >= b'0' && b <= b'9')
+            || (b == b'_');
+        if !ok {
+            panic_with_error!(env, ContractError::InvalidUsername);
+        }
+        i += 1;
+    }
+}
+
+fn get_username(env: &Env, user: &Address) -> Option<String> {
+    env.storage()
+        .persistent()
+        .get::<_, String>(&DataKey::Username(user.clone()))
+}
+
+fn set_username(env: &Env, user: &Address, username: &String) {
+    env.storage()
+        .persistent()
+        .set(&DataKey::Username(user.clone()), username);
+}
+
+fn get_username_owner(env: &Env, username: &String) -> Option<Address> {
+    env.storage()
+        .persistent()
+        .get::<_, Address>(&DataKey::UsernameOwner(username.clone()))
+}
+
+fn set_username_owner(env: &Env, username: &String, owner: &Address) {
+    env.storage()
+        .persistent()
+        .set(&DataKey::UsernameOwner(username.clone()), owner);
+}
+
+fn remove_username_owner(env: &Env, username: &String) {
+    env.storage()
+        .persistent()
+        .remove(&DataKey::UsernameOwner(username.clone()));
 }
 
 fn get_next_group_id(env: &Env) -> u32 {
@@ -939,6 +1005,65 @@ impl PaluwaganContract {
 
     pub fn get_user_trust(env: Env, user: Address) -> UserTrust {
         get_user_trust_or_default(&env, &user)
+    }
+
+    /// Sets or updates the caller's username (public, unique).
+    /// Rules: 3..=20 chars, only [a-z0-9_].
+    pub fn set_username(env: Env, user: Address, username: String) {
+        user.require_auth();
+        validate_username(&env, &username);
+
+        // Enforce uniqueness
+        if let Some(owner) = get_username_owner(&env, &username) {
+            if owner != user {
+                panic_with_error!(env, ContractError::UsernameTaken);
+            }
+        }
+
+        // If renaming, free the old username
+        if let Some(old) = get_username(&env, &user) {
+            if old != username {
+                remove_username_owner(&env, &old);
+            }
+        }
+
+        set_username(&env, &user, &username);
+        set_username_owner(&env, &username, &user);
+    }
+
+    pub fn get_username(env: Env, user: Address) -> Option<String> {
+        get_username(&env, &user)
+    }
+
+    pub fn get_username_owner(env: Env, username: String) -> Option<Address> {
+        validate_username(&env, &username);
+        get_username_owner(&env, &username)
+    }
+
+    /// Lists public groups by scanning a range of IDs.
+    /// Note: Soroban contracts can't iterate storage keys directly, so callers page by ID range.
+    pub fn list_public_groups(env: Env, start_id: u32, limit: u32) -> Vec<ListedGroup> {
+        let mut out: Vec<ListedGroup> = Vec::new(&env);
+        if limit == 0 {
+            return out;
+        }
+
+        let mut id = start_id;
+        let end = start_id.saturating_add(limit);
+        while id < end {
+            if let Some(group) = env
+                .storage()
+                .persistent()
+                .get::<_, Group>(&DataKey::Group(id))
+            {
+                if group.visibility == GroupVisibility::Public && group.status != GroupStatus::Completed {
+                    out.push_back(ListedGroup { id, group });
+                }
+            }
+            id += 1;
+        }
+
+        out
     }
 }
 

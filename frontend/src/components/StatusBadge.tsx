@@ -2,16 +2,20 @@ interface StatusBadgeProps {
   status: string;
 }
 
-const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
-  WaitingForMembers: { label: "Waiting for Members", className: "badge--waiting" },
-  Active: { label: "Active", className: "badge--active" },
-  Completed: { label: "Completed", className: "badge--completed" },
-  Unpaid: { label: "Unpaid", className: "badge--danger" },
-  PendingConfirmation: { label: "Waiting for Confirmation", className: "badge--warning" },
-  Confirmed: { label: "Confirmed", className: "badge--success" },
+import { useTranslation } from "react-i18next";
+
+const STATUS_CLASS: Record<string, string> = {
+  WaitingForMembers: "badge--waiting",
+  Active: "badge--active",
+  Completed: "badge--completed",
+  Unpaid: "badge--danger",
+  PendingConfirmation: "badge--warning",
+  Confirmed: "badge--success",
 };
 
 export default function StatusBadge({ status }: StatusBadgeProps) {
-  const config = STATUS_CONFIG[status] || { label: status, className: "badge--neutral" };
-  return <span className={`badge ${config.className}`}>{config.label}</span>;
+  const { t } = useTranslation();
+  const className = STATUS_CLASS[status] || "badge--neutral";
+  const label = STATUS_CLASS[status] ? t(`status.${status}`) : status;
+  return <span className={`badge ${className}`}>{label}</span>;
 }
