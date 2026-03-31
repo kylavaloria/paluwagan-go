@@ -1,4 +1,5 @@
 import { Star } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 interface StarRatingProps {
   score: number | null;
@@ -6,18 +7,18 @@ interface StarRatingProps {
   showLabel?: boolean;
 }
 
-function getLabel(score: number | null): string {
-  if (score === null) return "New member";
-  if (score >= 5) return "Excellent";
-  if (score >= 4) return "Good";
-  if (score >= 3) return "Fair";
-  if (score >= 2) return "Needs improvement";
-  return "At risk";
-}
-
 export default function StarRating({ score, size = 18, showLabel = true }: StarRatingProps) {
+  const { t } = useTranslation();
   const maxStars = 5;
   const filledCount = score ?? 0;
+  const label = (() => {
+    if (score === null) return t("rating.new");
+    if (score >= 5) return t("rating.excellent");
+    if (score >= 4) return t("rating.good");
+    if (score >= 3) return t("rating.fair");
+    if (score >= 2) return t("rating.needsImprovement");
+    return t("rating.atRisk");
+  })();
 
   return (
     <div className="star-rating">
@@ -31,7 +32,7 @@ export default function StarRating({ score, size = 18, showLabel = true }: StarR
         />
       ))}
       {showLabel && (
-        <span className="star-rating-label">{getLabel(score)}</span>
+        <span className="star-rating-label">{label}</span>
       )}
     </div>
   );

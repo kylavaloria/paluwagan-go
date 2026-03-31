@@ -1,8 +1,10 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useWallet } from "../hooks/useWallet";
-import { getUserTrust, type UserTrust } from "../lib/contract";
+import { getUserTrust, getUsername, setUsername, type UserTrust } from "../lib/contract";
 import StarRating from "../components/StarRating";
+import ActionButton from "../components/ActionButton";
+import { useTranslation } from "react-i18next";
 import {
   User,
   CheckCircle,
@@ -17,9 +19,14 @@ import {
 export default function ProfilePage() {
   const { address } = useWallet();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [trust, setTrust] = useState<UserTrust | null>(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [username, setUsernameValue] = useState<string | null>(null);
+  const [usernameInput, setUsernameInput] = useState("");
+  const [usernameSaving, setUsernameSaving] = useState(false);
+  const [usernameError, setUsernameError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!address) {
@@ -29,9 +36,16 @@ export default function ProfilePage() {
     let cancelled = false;
     setLoading(true);
 
-    getUserTrust(address)
-      .then((t) => { if (!cancelled) setTrust(t); })
-      .catch(() => { if (!cancelled) setTrust(null); })
+    Promise.all([
+      getUserTrust(address).then((t) => t).catch(() => null),
+      getUsername(address).then((u) => u).catch(() => null),
+    ])
+      .then(([t, u]) => {
+        if (cancelled) return;
+        setTrust(t);
+        setUsernameValue(u);
+        setUsernameInput(u ?? "");
+      })
       .finally(() => { if (!cancelled) setLoading(false); });
 
     return () => { cancelled = true; };
@@ -44,13 +58,84 @@ export default function ProfilePage() {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const normalizeUsername = (raw: string) => raw.trim().toLowerCase();
+
+  const isValidUsername = (name: string) => {
+    if (name.length < 3 || name.length > 20) return false;
+    return /^[a-z0-9_]+$/.test(name);
+  };
+
+  const saveUsername = async () => {
+    if (!address) return;
+    const next = normalizeUsername(usernameInput);
+    setUsernameError(null);
+
+    if (!isValidUsername(next)) {
+      setUsernameError(t("profile.usernameInvalid"));
+      return;
+    }
+
+    setUsernameSaving(true);
+    try {
+      await setUsername(address, next);
+      const u = await getUsername(address);
+      setUsernameValue(u);
+      setUsernameInput(u ?? next);
+    } catch (err) {
+      setUsernameError(err instanceof Error ? err.message : t("profile.saveUsernameError"));
+    } finally {
+      setUsernameSaving(false);
+    }
+  };
+
   if (!address) return null;
 
   return (
     <div className="container container--narrow" style={{ paddingBottom: "var(--space-16)" }}>
       <div className="page-header">
-        <h1 className="page-title">Your Profile</h1>
-        <p className="page-subtitle">Your trust reputation across all groups.</p>
+        <h1 className="page-title">{t("profile.title")}</h1>
+        <p className="page-subtitle">{t("profile.subtitle")}</p>
+      </div>
+
+      {/* Username */}
+      <div className="card mb-6">
+        <div className="card-body">
+          <div className="flex items-center justify-between" style={{ gap: "var(--space-4)" }}>
+            <div>
+              <div className="text-sm text-muted">{t("profile.username")}</div>
+              <div style={{ fontWeight: 700, color: "var(--text-heading)" }}>
+                {username ? `@${username}` : <span className="text-muted">{t("profile.notSet")}</span>}
+              </div>
+            </div>
+            <div style={{ minWidth: 260 }}>
+              <div className="inline-form">
+                <input
+                  className={`form-input${usernameError ? " form-input--error" : ""}`}
+                  placeholder="hal. kyla_01"
+                  value={usernameInput}
+                  onChange={(e) => setUsernameInput(e.target.value)}
+                />
+                <ActionButton
+                  variant="primary"
+                  size="sm"
+                  onClick={() => saveUsername()}
+                  loading={usernameSaving}
+                  disabled={loading}
+                >
+                  {t("common.save")}
+                </ActionButton>
+              </div>
+              <div className="form-hint">
+                {t("profile.usernameHint")}
+              </div>
+              {usernameError ? (
+                <div className="text-sm" style={{ color: "var(--danger)", marginTop: 6 }}>
+                  {usernameError}
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Wallet Address */}
@@ -61,7 +146,7 @@ export default function ProfilePage() {
               <User size={20} />
             </div>
             <div>
-              <div className="text-sm text-muted">Wallet Address</div>
+              <div className="text-sm text-muted">{t("profile.walletAddress")}</div>
               <div className="address" style={{ fontSize: "var(--font-size-sm)" }}>
                 {address.slice(0, 10)}...{address.slice(-6)}
               </div>
@@ -70,10 +155,10 @@ export default function ProfilePage() {
           <button
             className="btn btn--ghost btn--sm"
             onClick={copyAddress}
-            title="Copy full address"
+            title={t("profile.copyFullAddress")}
           >
             {copied ? <Check size={14} /> : <Copy size={14} />}
-            {copied ? "Copied" : "Copy"}
+            {copied ? t("common.copied") : t("common.copy")}
           </button>
         </div>
       </div>
@@ -81,7 +166,7 @@ export default function ProfilePage() {
       {loading ? (
         <div className="loading-screen">
           <div className="loading-spinner"></div>
-          <p>Loading your trust profile...</p>
+          <p>{t("profile.loadingTrust")}</p>
         </div>
       ) : trust ? (
         <>
@@ -89,15 +174,15 @@ export default function ProfilePage() {
           <div className="card mb-6">
             <div className="card-body text-center" style={{ padding: "var(--space-8)" }}>
               <h2 style={{ fontSize: "var(--font-size-lg)", fontWeight: 700, marginBottom: "var(--space-4)" }}>
-                Reliability Score
+                {t("profile.reliabilityScore")}
               </h2>
               <div style={{ marginBottom: "var(--space-3)" }}>
                 <StarRating score={trust.reliability_score} size={32} />
               </div>
               <p className="text-sm text-muted" style={{ maxWidth: 360, margin: "0 auto" }}>
                 {trust.reliability_score === null
-                  ? "You're new here! Complete a group to get your first rating."
-                  : "Your score is based on your payment history. Pay on time to keep it high!"}
+                  ? t("profile.blurbNew")
+                  : t("profile.blurbKnown")}
               </p>
             </div>
           </div>
@@ -109,35 +194,35 @@ export default function ProfilePage() {
                 <Users size={20} />
               </div>
               <div className="stat-value">{trust.joined_groups}</div>
-              <div className="stat-label">Groups Joined</div>
+              <div className="stat-label">{t("profile.statsJoined")}</div>
             </div>
             <div className="stat-card">
               <div className="stat-icon stat-icon--green">
                 <CheckCircle size={20} />
               </div>
               <div className="stat-value">{trust.completed_groups}</div>
-              <div className="stat-label">Completed</div>
+              <div className="stat-label">{t("profile.statsCompleted")}</div>
             </div>
             <div className="stat-card">
               <div className="stat-icon stat-icon--yellow">
                 <Clock size={20} />
               </div>
               <div className="stat-value">{trust.late_payments}</div>
-              <div className="stat-label">Late Payments</div>
+              <div className="stat-label">{t("profile.statsLate")}</div>
             </div>
             <div className="stat-card">
               <div className="stat-icon stat-icon--red">
                 <AlertTriangle size={20} />
               </div>
               <div className="stat-value">{trust.missed_payments}</div>
-              <div className="stat-label">Missed Payments</div>
+              <div className="stat-label">{t("profile.statsMissed")}</div>
             </div>
             <div className="stat-card">
               <div className="stat-icon stat-icon--red">
                 <Ban size={20} />
               </div>
               <div className="stat-value">{trust.defaulted_groups}</div>
-              <div className="stat-label">Defaulted Groups</div>
+              <div className="stat-label">{t("profile.statsDefaulted")}</div>
             </div>
           </div>
 
@@ -145,13 +230,10 @@ export default function ProfilePage() {
           <div className="card mt-6">
             <div className="card-body">
               <h3 style={{ fontSize: "var(--font-size-sm)", fontWeight: 700, marginBottom: "var(--space-3)" }}>
-                How is my score calculated?
+                {t("profile.scoreHowTitle")}
               </h3>
               <p className="text-sm text-muted" style={{ lineHeight: 1.7 }}>
-                You start with a score of 5 stars. Each missed payment, late payment, 
-                or defaulted group reduces your score. Completing groups on time helps 
-                maintain your reputation. Members with higher scores are more trusted 
-                in the community.
+                {t("profile.scoreHowBody")}
               </p>
             </div>
           </div>
@@ -161,9 +243,9 @@ export default function ProfilePage() {
           <div className="empty-state-icon">
             <User size={28} />
           </div>
-          <div className="empty-state-title">No activity yet</div>
+          <div className="empty-state-title">{t("profile.emptyTitle")}</div>
           <p className="empty-state-desc">
-            Join or create a group to start building your trust profile.
+            {t("profile.emptyDesc")}
           </p>
         </div>
       )}

@@ -7,6 +7,7 @@ import { addMyGroup } from "../lib/store";
 import { friendlyError } from "../lib/errors";
 import Stepper from "../components/Stepper";
 import ActionButton from "../components/ActionButton";
+import { useTranslation } from "react-i18next";
 import {
   CheckCircle,
   Copy,
@@ -17,8 +18,6 @@ import {
   Link as LinkIcon,
 } from "lucide-react";
 
-const WIZARD_STEPS = ["Group Basics", "Contribution Details", "Payout Settings"];
-
 type OrgRole = "org_member" | "org_only";
 type PayoutMode = "join_order" | "randomized";
 type Schedule = "weekly" | "monthly" | "quarterly" | "yearly" | "custom";
@@ -28,6 +27,13 @@ export default function CreateGroupPage() {
   const { address } = useWallet();
   const { showToast } = useToast();
   const navigate = useNavigate();
+  const { t } = useTranslation();
+
+  const WIZARD_STEPS = [
+    t("createGroup.steps.basics"),
+    t("createGroup.steps.contribution"),
+    t("createGroup.steps.payout"),
+  ];
 
   const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
@@ -59,13 +65,13 @@ export default function CreateGroupPage() {
 
     const name = groupName.trim();
     if (name.length === 0 || name.length > 50) {
-      showToast("error", "Invalid group name", "Please enter a name between 1 and 50 characters.");
+      showToast("error", t("createGroup.invalidGroupNameTitle"), t("createGroup.invalidGroupNameMsg"));
       return;
     }
 
     const xlmValue = parseFloat(amountXlm);
     if (isNaN(xlmValue) || xlmValue <= 0) {
-      showToast("error", "Invalid amount", "Please enter a valid contribution amount.");
+      showToast("error", t("createGroup.invalidAmountTitle"), t("createGroup.invalidAmountMsg"));
       return;
     }
 
@@ -74,7 +80,7 @@ export default function CreateGroupPage() {
 
     const gap = schedule === "custom" ? parseInt(customGap, 10) || 0 : 0;
     if (schedule === "custom" && gap <= 0) {
-      showToast("error", "Invalid schedule", "Please specify how often members contribute.");
+      showToast("error", t("createGroup.invalidScheduleTitle"), t("createGroup.invalidScheduleMsg"));
       return;
     }
 
@@ -95,9 +101,9 @@ export default function CreateGroupPage() {
       );
       addMyGroup(address, groupId, "creator");
       setCreatedGroupId(groupId);
-      showToast("success", "Group created!", `Your group number is #${groupId}`);
+      showToast("success", t("createGroup.createdToastTitle"), t("createGroup.createdToastMsg", { id: groupId }));
     } catch (err) {
-      showToast("error", "Failed to create group", friendlyError(err));
+      showToast("error", t("createGroup.createFailedToastTitle"), friendlyError(err));
     } finally {
       setSubmitting(false);
     }
@@ -120,28 +126,27 @@ export default function CreateGroupPage() {
           <div className="success-icon">
             <CheckCircle size={40} />
           </div>
-          <h1 className="success-title">Your group is ready! 🎉</h1>
+          <h1 className="success-title">{t("createGroup.createdTitle")}</h1>
           <p className="success-subtitle">
             {groupName.trim() ? (
               <>
-                <strong>{groupName.trim()}</strong> is live. Share the group number below so
-                members can join.
+                {t("createGroup.createdSubtitleNamed", { name: groupName.trim() })}
               </>
             ) : (
-              "Share this group number with your members so they can join."
+              t("createGroup.createdSubtitle")
             )}
           </p>
           <div className="success-group-id">#{createdGroupId}</div>
           <div className="success-actions">
             <ActionButton variant="secondary" onClick={copyLink}>
               {linkCopied ? <CheckCircle size={16} /> : <Copy size={16} />}
-              {linkCopied ? "Link Copied!" : "Copy Invite Link"}
+              {linkCopied ? t("createGroup.linkCopied") : t("createGroup.copyInviteLink")}
             </ActionButton>
             <ActionButton
               variant="primary"
               onClick={() => navigate(`/group/${createdGroupId}`)}
             >
-              Go to Group
+              {t("createGroup.goToGroup")}
               <ArrowRight size={16} />
             </ActionButton>
           </div>
@@ -153,8 +158,8 @@ export default function CreateGroupPage() {
   return (
     <div className="container container--narrow" style={{ paddingBottom: "var(--space-16)" }}>
       <div className="page-header">
-        <h1 className="page-title">Start a New Group</h1>
-        <p className="page-subtitle">Set up your savings group in 3 easy steps.</p>
+        <h1 className="page-title">{t("createGroup.title")}</h1>
+        <p className="page-subtitle">{t("createGroup.subtitle")}</p>
       </div>
 
       <Stepper steps={WIZARD_STEPS} currentStep={step} />
@@ -166,46 +171,46 @@ export default function CreateGroupPage() {
             <>
               <div className="form-group">
                 <label className="form-label" htmlFor="create-group-name">
-                  Group name
+                  {t("createGroup.groupName")}
                 </label>
                 <input
                   id="create-group-name"
                   className="form-input"
                   type="text"
                   maxLength={50}
-                  placeholder="e.g. Weekend savings circle"
+                  placeholder={t("createGroup.groupNamePlaceholder")}
                   value={groupName}
                   onChange={(e) => setGroupName(e.target.value)}
                   autoComplete="off"
                 />
-                <span className="form-hint">1–50 characters, stored on-chain with the group.</span>
+                <span className="form-hint">{t("createGroup.groupNameHint")}</span>
               </div>
 
               <div className="form-group">
-                <label className="form-label">Will you also contribute to the pool?</label>
+                <label className="form-label">{t("createGroup.orgContributeQ")}</label>
                 <p className="form-hint mb-2">
-                  Choose whether you'll be a paying member or just the organizer.
+                  {t("createGroup.orgContributeHint")}
                 </p>
                 <div className="toggle-group">
                   <button
                     className={`toggle-option${orgRole === "org_member" ? " toggle-option--active" : ""}`}
                     onClick={() => setOrgRole("org_member")}
                   >
-                    Yes, I'll contribute
+                    {t("createGroup.orgMemberYes")}
                   </button>
                   <button
                     className={`toggle-option${orgRole === "org_only" ? " toggle-option--active" : ""}`}
                     onClick={() => setOrgRole("org_only")}
                   >
-                    No, organizer only
+                    {t("createGroup.orgOnlyNo")}
                   </button>
                 </div>
               </div>
 
               <div className="form-group">
-                <label className="form-label">How many people in the group?</label>
+                <label className="form-label">{t("createGroup.howManyPeople")}</label>
                 <p className="form-hint mb-2">
-                  This includes you if you're also contributing.
+                  {t("createGroup.howManyHint")}
                 </p>
                 <div className="number-stepper">
                   <button
@@ -227,19 +232,19 @@ export default function CreateGroupPage() {
               </div>
 
               <div className="form-group">
-                <label className="form-label">Who can join this group?</label>
+                <label className="form-label">{t("createGroup.whoCanJoin")}</label>
                 <div className="toggle-group">
                   <button
                     className={`toggle-option${isPublic ? " toggle-option--active" : ""}`}
                     onClick={() => setIsPublic(true)}
                   >
-                    Anyone
+                    {t("createGroup.anyone")}
                   </button>
                   <button
                     className={`toggle-option${!isPublic ? " toggle-option--active" : ""}`}
                     onClick={() => setIsPublic(false)}
                   >
-                    Invite only
+                    {t("createGroup.inviteOnly")}
                   </button>
                 </div>
               </div>
@@ -251,7 +256,7 @@ export default function CreateGroupPage() {
             <>
               <div className="form-group">
                 <label className="form-label">
-                  How much does each person contribute per round?
+                  {t("createGroup.amountQ")}
                 </label>
                 <div style={{ position: "relative" }}>
                   <input
@@ -278,20 +283,20 @@ export default function CreateGroupPage() {
                     XLM
                   </span>
                 </div>
-                <span className="form-hint">Contribution Amount (XLM)</span>
+                <span className="form-hint">{t("createGroup.amountHint")}</span>
               </div>
 
               <div className="form-group">
                 <label className="form-label">
-                  How often do members contribute?
+                  {t("createGroup.scheduleQ")}
                 </label>
                 <div className="radio-cards">
                   {([
-                    { value: "weekly", label: "Weekly", desc: "Every week" },
-                    { value: "monthly", label: "Monthly", desc: "Every month" },
-                    { value: "quarterly", label: "Quarterly", desc: "Every 3 months" },
-                    { value: "yearly", label: "Yearly", desc: "Once a year" },
-                    { value: "custom", label: "Custom", desc: "Set your own" },
+                    { value: "weekly", label: t("createGroup.schedule.weekly"), desc: t("createGroup.scheduleDesc.weekly") },
+                    { value: "monthly", label: t("createGroup.schedule.monthly"), desc: t("createGroup.scheduleDesc.monthly") },
+                    { value: "quarterly", label: t("createGroup.schedule.quarterly"), desc: t("createGroup.scheduleDesc.quarterly") },
+                    { value: "yearly", label: t("createGroup.schedule.yearly"), desc: t("createGroup.scheduleDesc.yearly") },
+                    { value: "custom", label: t("createGroup.schedule.custom"), desc: t("createGroup.scheduleDesc.custom") },
                   ] as const).map((opt) => (
                     <label
                       key={opt.value}
@@ -313,7 +318,7 @@ export default function CreateGroupPage() {
 
               {schedule === "custom" && (
                 <div className="form-group">
-                  <label className="form-label">Custom cycle gap (in ledger sequences)</label>
+                  <label className="form-label">{t("createGroup.customGapLabel")}</label>
                   <input
                     className="form-input"
                     type="number"
@@ -323,14 +328,14 @@ export default function CreateGroupPage() {
                     onChange={(e) => setCustomGap(e.target.value)}
                   />
                   <span className="form-hint">
-                    Each ledger sequence is roughly 5 seconds. 100 ≈ 8 minutes.
+                    {t("createGroup.customGapHint")}
                   </span>
                 </div>
               )}
 
               <div className="form-group">
                 <label className="form-label">
-                  Interest fee (optional)
+                  {t("createGroup.interestLabel")}
                 </label>
                 <div className="slider-group">
                   <input
@@ -345,7 +350,7 @@ export default function CreateGroupPage() {
                   <span className="slider-value">{(interestBps / 100).toFixed(2)}%</span>
                 </div>
                 <span className="form-hint">
-                  0% means no interest. Maximum 5%.
+                  {t("createGroup.interestHint")}
                 </span>
               </div>
             </>
@@ -356,7 +361,7 @@ export default function CreateGroupPage() {
             <>
               <div className="form-group">
                 <label className="form-label">
-                  How is the payout order decided?
+                  {t("createGroup.payoutOrderQ")}
                 </label>
                 <div className="radio-cards">
                   <label
@@ -369,9 +374,9 @@ export default function CreateGroupPage() {
                       checked={payoutMode === "join_order"}
                       onChange={() => setPayoutMode("join_order")}
                     />
-                    <span className="radio-card-label">First Come, First Served</span>
+                    <span className="radio-card-label">{t("createGroup.payoutJoinOrder")}</span>
                     <span className="radio-card-desc">
-                      Members receive payouts in the order they joined.
+                      {t("createGroup.payoutJoinOrderDesc")}
                     </span>
                   </label>
                   <label
@@ -384,16 +389,16 @@ export default function CreateGroupPage() {
                       checked={payoutMode === "randomized"}
                       onChange={() => setPayoutMode("randomized")}
                     />
-                    <span className="radio-card-label">Randomized</span>
+                    <span className="radio-card-label">{t("createGroup.payoutRandom")}</span>
                     <span className="radio-card-desc">
-                      The order is shuffled randomly when the group starts.
+                      {t("createGroup.payoutRandomDesc")}
                     </span>
                   </label>
                 </div>
               </div>
 
               <div className="form-group">
-                <label className="form-label">Payout type</label>
+                <label className="form-label">{t("createGroup.payoutType")}</label>
                 <div className="radio-cards">
                   <label
                     className={`radio-card${payoutType === "cash" ? " radio-card--selected" : ""}`}
@@ -405,8 +410,8 @@ export default function CreateGroupPage() {
                       checked={payoutType === "cash"}
                       onChange={() => setPayoutType("cash")}
                     />
-                    <span className="radio-card-label">Cash</span>
-                    <span className="radio-card-desc">Members contribute and receive cash.</span>
+                    <span className="radio-card-label">{t("createGroup.payoutCash")}</span>
+                    <span className="radio-card-desc">{t("createGroup.payoutCashDesc")}</span>
                   </label>
                   <label
                     className={`radio-card${payoutType === "item" ? " radio-card--selected" : ""}`}
@@ -418,8 +423,8 @@ export default function CreateGroupPage() {
                       checked={payoutType === "item"}
                       onChange={() => setPayoutType("item")}
                     />
-                    <span className="radio-card-label">Item</span>
-                    <span className="radio-card-desc">Members contribute toward an item purchase.</span>
+                    <span className="radio-card-label">{t("createGroup.payoutItem")}</span>
+                    <span className="radio-card-desc">{t("createGroup.payoutItemDesc")}</span>
                   </label>
                 </div>
               </div>
@@ -428,26 +433,26 @@ export default function CreateGroupPage() {
               <div className="card" style={{ background: "var(--bg-primary)", border: "1px solid var(--border)" }}>
                 <div className="card-body">
                   <h3 style={{ fontSize: "var(--font-size-sm)", fontWeight: 700, marginBottom: "var(--space-3)" }}>
-                    Summary
+                    {t("createGroup.summary")}
                   </h3>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-2)", fontSize: "var(--font-size-sm)" }}>
-                    <span className="text-muted">Name:</span>
+                    <span className="text-muted">{t("createGroup.summaryName")}</span>
                     <span>{groupName.trim() || "—"}</span>
-                    <span className="text-muted">Your role:</span>
-                    <span>{orgRole === "org_member" ? "Organizer & Member" : "Organizer only"}</span>
-                    <span className="text-muted">Members:</span>
-                    <span>{maxMembers} people</span>
-                    <span className="text-muted">Visibility:</span>
-                    <span>{isPublic ? "Public (anyone can join)" : "Private (invite only)"}</span>
-                    <span className="text-muted">Contribution:</span>
-                    <span>{amountXlm || "—"} XLM per round</span>
-                    <span className="text-muted">Schedule:</span>
+                    <span className="text-muted">{t("createGroup.summaryRole")}</span>
+                    <span>{orgRole === "org_member" ? t("createGroup.roleOrgMember") : t("createGroup.roleOrgOnly")}</span>
+                    <span className="text-muted">{t("createGroup.summaryMembers")}</span>
+                    <span>{maxMembers} {t("createGroup.people")}</span>
+                    <span className="text-muted">{t("createGroup.summaryVisibility")}</span>
+                    <span>{isPublic ? t("createGroup.visibilityPublic") : t("createGroup.visibilityPrivate")}</span>
+                    <span className="text-muted">{t("createGroup.summaryContribution")}</span>
+                    <span>{amountXlm || "—"} {t("createGroup.perRound")}</span>
+                    <span className="text-muted">{t("createGroup.summarySchedule")}</span>
                     <span style={{ textTransform: "capitalize" }}>{schedule === "custom" ? `Custom (${customGap} ledgers)` : schedule}</span>
-                    <span className="text-muted">Interest:</span>
-                    <span>{interestBps === 0 ? "None" : `${(interestBps / 100).toFixed(2)}%`}</span>
-                    <span className="text-muted">Payout order:</span>
-                    <span>{payoutMode === "join_order" ? "First come, first served" : "Randomized"}</span>
-                    <span className="text-muted">Payout type:</span>
+                    <span className="text-muted">{t("createGroup.summaryInterest")}</span>
+                    <span>{interestBps === 0 ? t("createGroup.none") : `${(interestBps / 100).toFixed(2)}%`}</span>
+                    <span className="text-muted">{t("createGroup.summaryPayoutOrder")}</span>
+                    <span>{payoutMode === "join_order" ? t("createGroup.payoutJoinOrder") : t("createGroup.payoutRandom")}</span>
+                    <span className="text-muted">{t("createGroup.summaryPayoutType")}</span>
                     <span style={{ textTransform: "capitalize" }}>{payoutType}</span>
                   </div>
                 </div>
@@ -460,7 +465,7 @@ export default function CreateGroupPage() {
             {step > 0 ? (
               <ActionButton variant="secondary" onClick={() => setStep(step - 1)}>
                 <ArrowLeft size={16} />
-                Back
+                {t("common.back")}
               </ActionButton>
             ) : (
               <div></div>
@@ -476,7 +481,7 @@ export default function CreateGroupPage() {
                   (step === 1 && (!amountXlm || parseFloat(amountXlm) <= 0))
                 }
               >
-                Next
+                {t("common.next")}
                 <ArrowRight size={16} />
               </ActionButton>
             ) : (
@@ -492,7 +497,7 @@ export default function CreateGroupPage() {
                 }
               >
                 <LinkIcon size={16} />
-                Create Group
+                {t("createGroup.create")}
               </ActionButton>
             )}
           </div>

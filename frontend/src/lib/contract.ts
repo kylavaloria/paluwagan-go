@@ -55,15 +55,16 @@ export type UserTrust = {
   reliability_score: number | null;
 };
 
+export type ListedGroup = {
+  id: number;
+  group: Group;
+};
+
 const NETWORK_PASSPHRASE = Networks.TESTNET;
 const READ_SIM_SOURCE = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
 
 function toU32(value: number): xdr.ScVal {
   return xdr.ScVal.scvU32(value);
-}
-
-function toI128(value: bigint | number | string): xdr.ScVal {
-  return nativeToScVal(BigInt(value), { type: "i128" });
 }
 
 function toAddress(value: string): xdr.ScVal {
@@ -73,12 +74,8 @@ function toAddress(value: string): xdr.ScVal {
   return nativeToScVal(value, { type: "address" });
 }
 
-function toSymbol(value: string): xdr.ScVal {
-  return nativeToScVal(value, { type: "symbol" });
-}
-
-function toBool(value: boolean): xdr.ScVal {
-  return nativeToScVal(value, { type: "bool" });
+function toStringVal(value: string): xdr.ScVal {
+  return nativeToScVal(value, { type: "string" });
 }
 
 /** Soroban `CreateGroupParams` (`contracttype`): XDR map with symbol keys. */
@@ -406,6 +403,10 @@ export async function advanceCycle(groupId: number, creator: string): Promise<vo
   await submitWrite<void>("advance_cycle", [toU32(groupId), toAddress(creator)]);
 }
 
+export async function setUsername(user: string, username: string): Promise<void> {
+  await submitWrite<void>("set_username", [toAddress(user), toStringVal(username)]);
+}
+
 // read functions (no signature)
 export async function getGroup(groupId: number): Promise<Group> {
   const raw = await simulateRead<unknown>("get_group", [toU32(groupId)]);
@@ -431,6 +432,28 @@ export async function getPayoutState(groupId: number, cycle: number): Promise<Pa
 
 export async function getUserTrust(address: string): Promise<UserTrust> {
   return simulateRead<UserTrust>("get_user_trust", [toAddress(address)]);
+}
+
+export async function getUsername(address: string): Promise<string | null> {
+  const raw = await simulateRead<unknown>("get_username", [toAddress(address)]);
+  return typeof raw === "string" && raw.length > 0 ? raw : null;
+}
+
+export async function getUsernameOwner(username: string): Promise<string | null> {
+  const raw = await simulateRead<unknown>("get_username_owner", [toStringVal(username)]);
+  return typeof raw === "string" && raw.length > 0 ? raw : null;
+}
+
+export async function listPublicGroups(startId: number, limit: number): Promise<ListedGroup[]> {
+  const raw = await simulateRead<unknown[]>("list_public_groups", [toU32(startId), toU32(limit)]);
+  if (!Array.isArray(raw)) return [];
+
+  return raw.map((entry) => {
+    const e = entry as { id?: unknown; group?: unknown };
+    const id = typeof e.id === "number" ? e.id : parseInt(String(e.id ?? "0"), 10);
+    const group = normalizeGroupFromChain(e.group);
+    return { id, group };
+  });
 }
 
 export async function getPaymentStatus(

@@ -1,8 +1,10 @@
 import { Outlet } from "react-router-dom";
 import Navbar from "./Navbar";
 import ToastContainer from "./Toast";
+import { useTranslation } from "react-i18next";
 
 export default function Layout() {
+  const { t } = useTranslation();
   return (
     <div className="layout">
       <Navbar />
@@ -11,7 +13,7 @@ export default function Layout() {
       </main>
       <footer className="footer">
         <div className="container">
-          Paluwagan Go — Save together, grow together. Built on Stellar.
+          {t("footer.tagline")}
         </div>
       </footer>
       <ToastContainer />
