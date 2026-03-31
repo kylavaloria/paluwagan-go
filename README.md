@@ -34,11 +34,7 @@
 
 <br/>
 
-<p align="center">
-  <a href="https://stellar.expert/explorer/testnet/contract/CCO5IV7XJWN6ODK7TRIN2M5B6GSA6JQDUF2QW6IMJJS5UEXKSFMYWGHH">
-    <img src="https://ibb.co/08YNW68" width="80%" alt="Stellar Expert — Paluwagan Go contract on testnet" />
-  </a>
-</p>
+<img width="1879" height="849" alt="Screenshot 2026-03-31 204038" src="https://github.com/user-attachments/assets/4fbb6d87-11f1-462b-af3a-c22df1426cd9" />
 
 <br/>
 
